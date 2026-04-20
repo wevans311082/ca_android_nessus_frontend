@@ -17,22 +17,22 @@ data class NessusSettings(
 
 class SettingsStore(private val context: Context) {
     private val baseUrlKey = stringPreferencesKey("base_url")
-    private val accessKey = stringPreferencesKey("access_key")
-    private val secretKey = stringPreferencesKey("secret_key")
+    private val accessKeyPref = stringPreferencesKey("access_key")
+    private val secretKeyPref = stringPreferencesKey("secret_key")
 
     val settings: Flow<NessusSettings> = context.dataStore.data.map { prefs ->
         NessusSettings(
             baseUrl = prefs[baseUrlKey].orEmpty(),
-            accessKey = prefs[accessKey].orEmpty(),
-            secretKey = prefs[secretKey].orEmpty()
+            accessKey = prefs[accessKeyPref].orEmpty(),
+            secretKey = prefs[secretKeyPref].orEmpty()
         )
     }
 
     suspend fun save(settings: NessusSettings) {
         context.dataStore.edit { prefs ->
             prefs[baseUrlKey] = settings.baseUrl.trim()
-            prefs[accessKey] = settings.accessKey.trim()
-            prefs[secretKey] = settings.secretKey.trim()
+            prefs[accessKeyPref] = settings.accessKey.trim()
+            prefs[secretKeyPref] = settings.secretKey.trim()
         }
     }
 }

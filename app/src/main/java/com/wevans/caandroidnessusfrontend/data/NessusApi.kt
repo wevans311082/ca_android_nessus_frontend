@@ -1,5 +1,6 @@
 package com.wevans.caandroidnessusfrontend.data
 
+import com.wevans.caandroidnessusfrontend.BuildConfig
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
@@ -75,10 +76,14 @@ class NessusApiFactory(
     private val authProvider: () -> NessusAuth
 ) {
     fun create(baseUrl: String): NessusApiService {
-        val logging = HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC }
         val client = OkHttpClient.Builder()
             .addInterceptor(NessusAuthInterceptor(authProvider))
-            .addInterceptor(logging)
+            .apply {
+                if (BuildConfig.DEBUG) {
+                    val logging = HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC }
+                    addInterceptor(logging)
+                }
+            }
             .build()
 
         return Retrofit.Builder()

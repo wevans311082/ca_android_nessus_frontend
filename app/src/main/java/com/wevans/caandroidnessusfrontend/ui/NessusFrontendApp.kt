@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -112,10 +113,16 @@ fun NessusFrontendApp(viewModel: NessusViewModel) {
 }
 
 @Composable
-private fun ScansTab(viewModel: NessusViewModel, state: NessusUiState) {
+private fun androidx.compose.foundation.layout.ColumnScope.ScansTab(
+    viewModel: NessusViewModel,
+    state: NessusUiState
+) {
     var renameValue by remember(state.selectedScan?.id) { mutableStateOf(state.selectedScan?.name.orEmpty()) }
 
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(
+        modifier = Modifier.weight(1f),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         item {
             Text("Scans", style = MaterialTheme.typography.headlineSmall)
         }
@@ -200,7 +207,10 @@ private fun ScansTab(viewModel: NessusViewModel, state: NessusUiState) {
 }
 
 @Composable
-private fun GroupsTab(viewModel: NessusViewModel, state: NessusUiState) {
+private fun androidx.compose.foundation.layout.ColumnScope.GroupsTab(
+    viewModel: NessusViewModel,
+    state: NessusUiState
+) {
     var groupName by remember { mutableStateOf("") }
 
     Text("Groups", style = MaterialTheme.typography.headlineSmall)
@@ -217,7 +227,10 @@ private fun GroupsTab(viewModel: NessusViewModel, state: NessusUiState) {
         }
     }) { Text("Create Group") }
 
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(
+        modifier = Modifier.weight(1f),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         items(state.groups, key = { it.id }) { group ->
             Card(modifier = Modifier.fillMaxWidth()) {
                 Row(
@@ -238,9 +251,15 @@ private fun GroupsTab(viewModel: NessusViewModel, state: NessusUiState) {
 }
 
 @Composable
-private fun AgentsTab(viewModel: NessusViewModel, state: NessusUiState) {
+private fun androidx.compose.foundation.layout.ColumnScope.AgentsTab(
+    viewModel: NessusViewModel,
+    state: NessusUiState
+) {
     Text("Agents", style = MaterialTheme.typography.headlineSmall)
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(
+        modifier = Modifier.weight(1f),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         items(state.agents, key = { it.id }) { agent ->
             Card(modifier = Modifier.fillMaxWidth()) {
                 Row(
