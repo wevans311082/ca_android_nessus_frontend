@@ -4,37 +4,38 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.wevans.caandroidnessusfrontend.data.NessusAgent
-import com.wevans.caandroidnessusfrontend.data.NessusApiFactory
-import com.wevans.caandroidnessusfrontend.data.NessusAuth
-import com.wevans.caandroidnessusfrontend.data.NessusGroup
-import com.wevans.caandroidnessusfrontend.data.NessusRepository
-import com.wevans.caandroidnessusfrontend.data.NessusScanDetailResponse
-import com.wevans.caandroidnessusfrontend.data.NessusSettings
-import com.wevans.caandroidnessusfrontend.data.PluginInfo
-import com.wevans.caandroidnessusfrontend.data.ScanSummary
-import com.wevans.caandroidnessusfrontend.data.SettingsStore
+import com.wevans.caandroidnessusfrontend.data.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
 
 data class NessusUiState(
     val settings: NessusSettings = NessusSettings(),
     val scans: List<ScanSummary> = emptyList(),
     val selectedScan: ScanSummary? = null,
     val selectedScanDetail: NessusScanDetailResponse? = null,
-    val selectedPlugin: PluginInfo? = null,
+    val hostVulnerabilities: List<ScanVulnerability>? = null,
+    val selectedPlugin: List<PluginAttribute> = emptyList(),
     val groups: List<NessusGroup> = emptyList(),
+    val agentGroups: List<NessusAgentGroup> = emptyList(),
+    val groupAgents: List<NessusAgent> = emptyList(),
     val agents: List<NessusAgent> = emptyList(),
+    val selectedAgent: NessusAgent? = null,
     val loading: Boolean = false,
-    val message: String? = null
+    val isDownloadingReport: Boolean = false,
+    val message: String? = null,
+    val downloadedFilePath: String? = null
 )
 
 class NessusViewModel(
     private val settingsStore: SettingsStore,
-    private val repositoryFactory: (NessusSettings) -> NessusRepository
+    private val repositoryFactory: (NessusSettings) -> NessusRepository,
+    private val applicationContext: Context
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(NessusUiState())
     val uiState: StateFlow<NessusUiState> = _uiState.asStateFlow()
@@ -54,19 +55,93 @@ class NessusViewModel(
         }
     }
 
+    fun testConnection() = runManaged("Connection failed") {
+        val status = repository().testConnection()
+        if (status.status == "ready") {
+            _uiState.update { it.copy(message = "Connection successful!") }
+        } else {
+            _uiState.update { it.copy(message = "Connection failed: Server not ready") }
+        }
+    }
+
+    fun downloadReport(scanId: Int, chapters: String) = viewModelScope.launch {
+        _uiState.update { it.copy(isDownloadingReport = true, message = "Requesting report generation...") }
+        try {
+            val fileId = repository().exportScan(scanId, chapters)
+            
+            // Poll status
+            var status = "loading"
+            while (status != "ready") {
+                delay(2000)
+                status = repository().getExportStatus(scanId, fileId)
+                _uiState.update { it.copy(message = "Generating report: $status...") }
+            }
+            
+            _uiState.update { it.copy(message = "Downloading report...") }
+            val responseBody = repository().downloadScan(scanId, fileId)
+            val file = File(applicationContext.cacheDir, "scan-report-$scanId.pdf") 
+            
+            responseBody.byteStream().use { input ->
+                FileOutputStream(file).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            _uiState.update { it.copy(downloadedFilePath = file.absolutePath, message = "Report downloaded successfully!") }
+        } catch (e: Exception) {
+            _uiState.update { it.copy(message = "Failed to generate report: ${e.message}") }
+        } finally {
+            _uiState.update { it.copy(isDownloadingReport = false) }
+        }
+    }
+
+    fun clearDownloadedFile() {
+        _uiState.update { it.copy(downloadedFilePath = null) }
+    }
+
+
     fun loadScans() = runManaged("Could not load scans") {
         val scans = repository().listScans()
         _uiState.update { it.copy(scans = scans) }
     }
 
-    fun loadScanDetails(scan: ScanSummary) = runManaged("Could not load scan details") {
-        val detail = repository().getScan(scan.id)
-        _uiState.update { it.copy(selectedScan = scan, selectedScanDetail = detail) }
+    fun loadScanDetails(scan: ScanSummary, historyId: Int? = null) = runManaged("Could not load scan details") {
+        val detail = repository().getScan(scan.id, historyId)
+        _uiState.update { currentState ->
+            val historyToKeep = if (historyId != null && detail.history.isNullOrEmpty()) {
+                currentState.selectedScanDetail?.history
+            } else {
+                detail.history
+            }
+            
+            currentState.copy(
+                selectedScan = scan, 
+                selectedScanDetail = detail.copy(history = historyToKeep), 
+                selectedPlugin = emptyList(),
+                hostVulnerabilities = null
+            )
+        }
+    }
+    
+    fun loadHostVulnerabilities(scanId: Int, hostId: Int?, historyId: Int?) {
+        if (hostId == null) {
+            _uiState.update { it.copy(hostVulnerabilities = null) }
+            return
+        }
+        runManaged("Could not load host details") {
+            val response = repository().getScanHost(scanId, hostId, historyId)
+            _uiState.update { it.copy(hostVulnerabilities = response.vulnerabilities) }
+        }
     }
 
-    fun loadPlugin(pluginId: Int) = runManaged("Could not load plugin") {
-        val plugin = repository().getPlugin(pluginId)
-        _uiState.update { it.copy(selectedPlugin = plugin) }
+    fun loadPlugin(pluginId: Int) {
+        if (pluginId == 0) {
+            _uiState.update { it.copy(selectedPlugin = emptyList()) }
+            return
+        }
+        runManaged("Could not load plugin") {
+            val plugin = repository().getPlugin(pluginId)
+            _uiState.update { it.copy(selectedPlugin = plugin) }
+        }
     }
 
     fun updateScanName(scanId: Int, scanName: String) = runManaged("Could not update scan settings") {
@@ -87,9 +162,16 @@ class NessusViewModel(
         _uiState.update { it.copy(message = "Scan stopped") }
     }
 
+    fun pauseScan(scanId: Int) = runManaged("Could not pause scan") {
+        repository().pauseScan(scanId)
+        loadScans()
+        _uiState.update { it.copy(message = "Scan paused") }
+    }
+
+
     fun deleteScan(scanId: Int) = runManaged("Could not delete scan") {
         repository().deleteScan(scanId)
-        _uiState.update { it.copy(selectedScan = null, selectedScanDetail = null, selectedPlugin = null) }
+        _uiState.update { it.copy(selectedScan = null, selectedScanDetail = null, selectedPlugin = emptyList()) }
         loadScans()
         _uiState.update { it.copy(message = "Scan deleted") }
     }
@@ -111,6 +193,16 @@ class NessusViewModel(
         _uiState.update { it.copy(message = "Group deleted") }
     }
 
+    fun loadAgentGroups() = runManaged("Could not load agent groups") {
+        val groups = repository().listAgentGroups()
+        _uiState.update { it.copy(agentGroups = groups) }
+    }
+
+    fun loadGroupAgents(groupId: Int) = runManaged("Could not load agents in group") {
+        val agents = repository().listAgentsInGroup(groupId)
+        _uiState.update { it.copy(groupAgents = agents) }
+    }
+
     fun loadAgents() = runManaged("Could not load agents") {
         val agents = repository().listAgents()
         _uiState.update { it.copy(agents = agents) }
@@ -120,6 +212,10 @@ class NessusViewModel(
         repository().unlinkAgent(agentId)
         loadAgents()
         _uiState.update { it.copy(message = "Agent unlinked") }
+    }
+    
+    fun selectAgent(agent: NessusAgent?) {
+        _uiState.update { it.copy(selectedAgent = agent) }
     }
 
     fun clearMessage() {
@@ -147,7 +243,7 @@ class NessusViewModel(
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val appContext = context.applicationContext
                 val store = SettingsStore(appContext)
-                val vm = NessusViewModel(store) { settings ->
+                val vm = NessusViewModel(store, { settings ->
                     NessusRepository(
                         settingsProvider = { settings },
                         apiFactory = NessusApiFactory {
@@ -157,7 +253,7 @@ class NessusViewModel(
                             )
                         }
                     )
-                }
+                }, appContext)
                 return vm as T
             }
         }

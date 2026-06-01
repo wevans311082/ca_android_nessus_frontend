@@ -1,46 +1,30 @@
 package com.wevans.caandroidnessusfrontend.ui
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.wevans.caandroidnessusfrontend.ui.theme.NessusFrontendTheme
 import kotlinx.coroutines.launch
 
-private enum class MainTab(val label: String) {
-    Scans("Scans"),
-    Groups("Groups"),
-    Agents("Agents"),
-    Settings("Settings")
+private enum class NavItem(val label: String, val icon: ImageVector) {
+    Scans("Scans", Icons.Default.Search),
+    Agents("Agents", Icons.Default.Build),
+    Settings("Settings", Icons.Default.Settings),
+    Help("Help", Icons.Default.Info)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,14 +33,18 @@ fun NessusFrontendApp(viewModel: NessusViewModel) {
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    var selectedTab by rememberSaveable { mutableStateOf(MainTab.Scans) }
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    var currentNav by rememberSaveable { mutableStateOf(NavItem.Scans) }
 
-    LaunchedEffect(selectedTab, state.settings.baseUrl) {
-        when (selectedTab) {
-            MainTab.Scans -> if (state.settings.baseUrl.isNotBlank()) viewModel.loadScans()
-            MainTab.Groups -> if (state.settings.baseUrl.isNotBlank()) viewModel.loadGroups()
-            MainTab.Agents -> if (state.settings.baseUrl.isNotBlank()) viewModel.loadAgents()
-            MainTab.Settings -> Unit
+    LaunchedEffect(currentNav, state.settings.baseUrl) {
+        if (state.settings.baseUrl.isBlank()) return@LaunchedEffect
+        when (currentNav) {
+            NavItem.Scans -> viewModel.loadScans()
+            NavItem.Agents -> {
+                viewModel.loadAgentGroups()
+                viewModel.loadAgents()
+            }
+            NavItem.Settings, NavItem.Help -> Unit
         }
     }
 
@@ -67,45 +55,82 @@ fun NessusFrontendApp(viewModel: NessusViewModel) {
         }
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = {
-            NavigationBar {
-                MainTab.entries.forEach { tab ->
-                    NavigationBarItem(
-                        selected = selectedTab == tab,
-                        onClick = { selectedTab = tab },
-                        label = { Text(tab.label) },
-                        icon = {}
+    NessusFrontendTheme {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet {
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            "CyberAsk Scanner",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    HorizontalDivider()
+                    NavItem.entries.forEach { item ->
+                        NavigationDrawerItem(
+                            icon = { Icon(item.icon, contentDescription = null) },
+                            label = { Text(item.label) },
+                            selected = currentNav == item,
+                            onClick = {
+                                currentNav = item
+                                scope.launch { drawerState.close() }
+                            },
+                            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                        )
+                    }
+                }
+            }
+        ) {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = { Text(currentNav.label, fontWeight = FontWeight.SemiBold) },
+                        navigationIcon = {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Default.Menu, contentDescription = "Menu")
+                            }
+                        },
+                        actions = {
+                            if (currentNav == NavItem.Scans) {
+                                IconButton(onClick = { viewModel.loadScans() }) {
+                                    Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                                }
+                            }
+                        }
                     )
-                }
-            }
-        }
-    ) { padding ->
-        if (state.loading) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-            ) { CircularProgressIndicator() }
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (state.settings.baseUrl.isBlank() && selectedTab != MainTab.Settings) {
-                    Text("Set Nessus URL and API keys in Settings to connect.")
-                }
-                when (selectedTab) {
-                    MainTab.Scans -> ScansTab(viewModel, state)
-                    MainTab.Groups -> GroupsTab(viewModel, state)
-                    MainTab.Agents -> AgentsTab(viewModel, state)
-                    MainTab.Settings -> SettingsTab(viewModel, state)
+                },
+                snackbarHost = { SnackbarHost(snackbarHostState) }
+            ) { padding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                ) {
+                    if (state.settings.baseUrl.isBlank() && currentNav != NavItem.Settings && currentNav != NavItem.Help) {
+                        EmptyState("Setup Connection", "Go to Settings to configure your API connection.") {
+                            currentNav = NavItem.Settings
+                        }
+                    } else {
+                        when (currentNav) {
+                            NavItem.Scans -> ScansScreen(viewModel, state)
+                            NavItem.Agents -> AgentsScreen(viewModel, state)
+                            NavItem.Settings -> SettingsScreen(viewModel, state)
+                            NavItem.Help -> HelpScreen()
+                        }
+                    }
+
+                    if (state.loading) {
+                        CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    }
                 }
             }
         }
@@ -113,200 +138,225 @@ fun NessusFrontendApp(viewModel: NessusViewModel) {
 }
 
 @Composable
-private fun androidx.compose.foundation.layout.ColumnScope.ScansTab(
-    viewModel: NessusViewModel,
-    state: NessusUiState
-) {
-    var renameValue by remember(state.selectedScan?.id) { mutableStateOf(state.selectedScan?.name.orEmpty()) }
-
-    LazyColumn(
-        modifier = Modifier.weight(1f),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+fun HelpScreen() {
+    val uriHandler = LocalUriHandler.current
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        item {
-            Text("Scans", style = MaterialTheme.typography.headlineSmall)
+        Icon(
+            Icons.Default.Lock, 
+            contentDescription = null, 
+            modifier = Modifier.size(80.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Spacer(Modifier.height(16.dp))
+        Text("CyberAsk Vulnerability Scanner", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Text("Version 1.1.0", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+        
+        Spacer(Modifier.height(32.dp))
+        
+        Text(
+            "This application provides a secure, mobile interface to manage your vulnerability scans and agents.",
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.bodyLarge
+        )
+        
+        Spacer(Modifier.height(32.dp))
+        
+        Button(
+            onClick = { uriHandler.openUri("https://www.cyberask.co.uk") },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.Info, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Visit CyberAsk Website")
         }
-        items(state.scans, key = { it.id }) { scan ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { viewModel.loadScanDetails(scan) }
-            ) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(scan.name, fontWeight = FontWeight.Bold)
-                    Text("Status: ${scan.status.orEmpty()}")
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { viewModel.startScan(scan.id) }) { Text("Start") }
-                        Button(onClick = { viewModel.stopScan(scan.id) }) { Text("Stop") }
-                        Button(onClick = { viewModel.deleteScan(scan.id) }) { Text("Delete") }
+        
+        Spacer(Modifier.height(16.dp))
+        
+        OutlinedButton(
+            onClick = { uriHandler.openUri("https://www.cyberask.co.uk/privacy-policy") },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.Info, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Privacy Policy")
+        }
+    }
+}
+
+@Composable
+fun EmptyState(title: String, message: String, onAction: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline)
+        Spacer(Modifier.height(16.dp))
+        Text(title, style = MaterialTheme.typography.titleLarge)
+        Text(message, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp), textAlign = TextAlign.Center)
+        Button(onClick = onAction, modifier = Modifier.padding(top = 24.dp)) {
+            Text("Go to Settings")
+        }
+    }
+}
+
+@Composable
+fun GroupsScreen(viewModel: NessusViewModel, state: NessusUiState) {
+    var showAddDialog by remember { mutableStateOf(false) }
+    var newGroupName by remember { mutableStateOf("") }
+
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(state.groups) { group ->
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(group.name, fontWeight = FontWeight.Bold)
+                            Text("Owner: ${group.owner ?: "System"}", style = MaterialTheme.typography.bodySmall)
+                        }
+                        IconButton(onClick = { viewModel.deleteGroup(group.id) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                        }
                     }
                 }
             }
         }
 
-        state.selectedScan?.let { scan ->
-            item {
-                Text("Edit Scan Settings", style = MaterialTheme.typography.titleMedium)
+        FloatingActionButton(
+            onClick = { showAddDialog = true },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "Add Group")
+        }
+    }
+
+    if (showAddDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddDialog = false },
+            title = { Text("Create User Group") },
+            text = {
                 OutlinedTextField(
-                    value = renameValue,
-                    onValueChange = { renameValue = it },
-                    label = { Text("Scan name") },
-                    modifier = Modifier.fillMaxWidth()
+                    value = newGroupName,
+                    onValueChange = { newGroupName = it },
+                    label = { Text("Group Name") }
                 )
-                Button(
-                    onClick = { viewModel.updateScanName(scan.id, renameValue) },
-                    modifier = Modifier.padding(top = 8.dp)
-                ) {
-                    Text("Save")
-                }
-            }
-        }
-
-        state.selectedScanDetail?.let { detail ->
-            item {
-                Text("Results", style = MaterialTheme.typography.headlineSmall)
-                Text("Scan: ${detail.info?.name.orEmpty()}")
-                Text("Policy: ${detail.info?.policyName.orEmpty()}")
-            }
-            items(detail.vulnerabilities, key = { it.pluginId }) { vuln ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(vuln.pluginName, fontWeight = FontWeight.Bold)
-                        Text("Severity: ${vuln.severity ?: 0} | Count: ${vuln.count ?: 0}")
-                        Button(onClick = { viewModel.loadPlugin(vuln.pluginId) }) { Text("Plugin details") }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (newGroupName.isNotBlank()) {
+                        viewModel.createGroup(newGroupName)
+                        newGroupName = ""
+                        showAddDialog = false
                     }
-                }
+                }) { Text("Create") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddDialog = false }) { Text("Cancel") }
             }
-
-            item {
-                Text("Remediations", style = MaterialTheme.typography.titleLarge)
-            }
-            items(detail.remediations) { remediation ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(remediation.value.orEmpty())
-                        Text("Affected vulns: ${remediation.vulnerabilityCount ?: 0}")
-                    }
-                }
-            }
-        }
-
-        state.selectedPlugin?.let { plugin ->
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(plugin.name.orEmpty(), fontWeight = FontWeight.Bold)
-                        Text("Family: ${plugin.family.orEmpty()}")
-                        Text(plugin.description.orEmpty())
-                        Text("Solution: ${plugin.solution.orEmpty()}")
-                    }
-                }
-            }
-        }
+        )
     }
 }
 
 @Composable
-private fun androidx.compose.foundation.layout.ColumnScope.GroupsTab(
-    viewModel: NessusViewModel,
-    state: NessusUiState
-) {
-    var groupName by remember { mutableStateOf("") }
-
-    Text("Groups", style = MaterialTheme.typography.headlineSmall)
-    OutlinedTextField(
-        value = groupName,
-        onValueChange = { groupName = it },
-        label = { Text("New group") },
-        modifier = Modifier.fillMaxWidth()
-    )
-    Button(onClick = {
-        if (groupName.isNotBlank()) {
-            viewModel.createGroup(groupName)
-            groupName = ""
-        }
-    }) { Text("Create Group") }
-
-    LazyColumn(
-        modifier = Modifier.weight(1f),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(state.groups, key = { it.id }) { group ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text(group.name, fontWeight = FontWeight.Bold)
-                        Text("Owner: ${group.owner.orEmpty()}")
-                    }
-                    Button(onClick = { viewModel.deleteGroup(group.id) }) { Text("Delete") }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun androidx.compose.foundation.layout.ColumnScope.AgentsTab(
-    viewModel: NessusViewModel,
-    state: NessusUiState
-) {
-    Text("Agents", style = MaterialTheme.typography.headlineSmall)
-    LazyColumn(
-        modifier = Modifier.weight(1f),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(state.agents, key = { it.id }) { agent ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text(agent.name, fontWeight = FontWeight.Bold)
-                        Text("Status: ${agent.status.orEmpty()}")
-                    }
-                    Button(onClick = { viewModel.unlinkAgent(agent.id) }) { Text("Unlink") }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingsTab(viewModel: NessusViewModel, state: NessusUiState) {
+fun SettingsScreen(viewModel: NessusViewModel, state: NessusUiState) {
     var baseUrl by remember(state.settings.baseUrl) { mutableStateOf(state.settings.baseUrl) }
     var accessKey by remember(state.settings.accessKey) { mutableStateOf(state.settings.accessKey) }
     var secretKey by remember(state.settings.secretKey) { mutableStateOf(state.settings.secretKey) }
+    var showGroups by remember { mutableStateOf(false) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Connection", style = MaterialTheme.typography.headlineSmall)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("API Connection", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+
         OutlinedTextField(
             value = baseUrl,
             onValueChange = { baseUrl = it },
-            label = { Text("Nessus URL (e.g. https://host:8834)") },
-            modifier = Modifier.fillMaxWidth()
+            label = { Text("Scanner API URL") },
+            placeholder = { Text("https://cloud.tenable.com") },
+            modifier = Modifier.fillMaxWidth(),
+            leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }
         )
+
         OutlinedTextField(
             value = accessKey,
             onValueChange = { accessKey = it },
             label = { Text("Access Key") },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
         )
+
         OutlinedTextField(
             value = secretKey,
             onValueChange = { secretKey = it },
             label = { Text("Secret Key") },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
         )
-        Button(onClick = { viewModel.saveSettings(baseUrl, accessKey, secretKey) }) {
-            Text("Save Settings")
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { viewModel.saveSettings(baseUrl, accessKey, secretKey) },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Icon(Icons.Default.Check, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Save")
+            }
+            OutlinedButton(
+                onClick = { viewModel.testConnection() },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Test")
+            }
         }
+        
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        
+        Text("Management", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        
+        OutlinedButton(onClick = { showGroups = true }, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.Person, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Manage User Groups")
+        }
+    }
+    
+    if (showGroups) {
+        AlertDialog(
+            onDismissRequest = { showGroups = false },
+            title = { Text("User Groups") },
+            text = {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    GroupsScreen(viewModel, state)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showGroups = false }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 }
