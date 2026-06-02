@@ -28,6 +28,8 @@ class NessusRepository(
 
     suspend fun pauseScan(scanId: Int) = api().pauseScan(scanId)
 
+    suspend fun resumeScan(scanId: Int) = api().resumeScan(scanId)
+
     suspend fun deleteScan(scanId: Int) = api().deleteScan(scanId)
 
     suspend fun updateScanName(scanId: Int, scanName: String) {
@@ -55,7 +57,15 @@ class NessusRepository(
 
     suspend fun listAgentGroups(): List<NessusAgentGroup> = api().listAgentGroups().groups
 
+    suspend fun createAgentGroup(name: String) = api().createAgentGroup(body = CreateAgentGroupRequest(name.trim()))
+
+    suspend fun deleteAgentGroup(groupId: Int) = api().deleteAgentGroup(groupId)
+
     suspend fun listAgentsInGroup(groupId: Int): List<NessusAgent> = api().listAgentsInGroup(groupId).agents
+
+    suspend fun addAgentToGroup(groupId: Int, agentId: Int) = api().addAgentToGroup(groupId, agentId)
+
+    suspend fun removeAgentFromGroup(groupId: Int, agentId: Int) = api().removeAgentFromGroup(groupId, agentId)
 
     suspend fun listAgents(): List<NessusAgent> = api().listAgents().agents
 

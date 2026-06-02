@@ -144,7 +144,11 @@ data class ExportStatusResponse(
 )
 
 data class StartScanRequest(
-    @Json(name = "alt_targets") val altTargets: String = ""
+    @Json(name = "alt_targets") val altTargets: List<String>? = null
+)
+
+data class ScanUuidResponse(
+    @Json(name = "scan_uuid") val scanUuid: String? = null
 )
 
 data class UpdateScanSettingsRequest(
@@ -156,5 +160,9 @@ data class ScanSettingsPayload(
 )
 
 data class CreateGroupRequest(
+    val name: String
+)
+
+data class CreateAgentGroupRequest(
     val name: String
 )

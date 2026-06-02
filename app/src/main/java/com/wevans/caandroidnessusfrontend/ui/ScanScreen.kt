@@ -1,8 +1,5 @@
 package com.wevans.caandroidnessusfrontend.ui
 
-import android.content.Context
-import android.content.Intent
-import androidx.core.content.FileProvider
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -32,8 +29,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.wevans.caandroidnessusfrontend.data.*
-import java.io.File
-import java.text.SimpleDateFormat
 import java.util.*
 
 // --- Navigation & Main Screens ---
@@ -108,7 +103,8 @@ fun ScanListScreen(navController: NavController, viewModel: NessusViewModel, sta
                         },
                         onStart = { viewModel.startScan(scan.id) },
                         onStop = { viewModel.stopScan(scan.id) },
-                        onPause = { viewModel.pauseScan(scan.id) }
+                        onPause = { viewModel.pauseScan(scan.id) },
+                        onResume = { viewModel.resumeScan(scan.id) }
                     )
                 }
             }
@@ -430,17 +426,6 @@ fun VulnerabilityDetailedCard(vuln: ScanVulnerability, onClick: () -> Unit) {
     }
 }
 
-fun getSeverityColor(severity: Int?): Color {
-    return when (severity) {
-        4 -> com.wevans.caandroidnessusfrontend.ui.theme.ErrorRed
-        3 -> com.wevans.caandroidnessusfrontend.ui.theme.WarningYellow
-        2 -> com.wevans.caandroidnessusfrontend.ui.theme.CyberCyanVariant
-        1 -> com.wevans.caandroidnessusfrontend.ui.theme.SuccessGreen
-        0 -> com.wevans.caandroidnessusfrontend.ui.theme.InfoBlue
-        else -> Color.Gray
-    }
-}
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -518,7 +503,8 @@ fun ScanCard(
     onCardClick: () -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
-    onPause: () -> Unit
+    onPause: () -> Unit,
+    onResume: () -> Unit
 ) {
     Card(
         onClick = onCardClick,
@@ -541,27 +527,11 @@ fun ScanCard(
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(onClick = onPause) { Text("Pause") }
                     }
-                    "paused" -> Button(onClick = onStart) { Text("Resume") }
+                    "paused" -> Button(onClick = onResume) { Text("Resume") }
                     "completed", "canceled", "aborted" -> Button(onClick = onStart) { Text("Start") }
                 }
             }
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.padding(start = 8.dp))
         }
     }
-}
-
-fun sharePdf(context: Context, path: String) {
-    val file = File(path)
-    val uri = FileProvider.getUriForFile(context, context.packageName + ".provider", file)
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "application/pdf"
-        putExtra(Intent.EXTRA_STREAM, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    context.startActivity(Intent.createChooser(intent, "Share Report"))
-}
-
-private fun Long.toDateString(): String {
-    val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
-    return sdf.format(Date(this * 1000))
 }

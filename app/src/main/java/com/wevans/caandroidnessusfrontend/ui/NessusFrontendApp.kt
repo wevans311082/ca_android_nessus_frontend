@@ -169,9 +169,10 @@ fun HelpScreen() {
         
         Button(
             onClick = { uriHandler.openUri("https://www.cyberask.co.uk") },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
         ) {
-            Icon(Icons.Default.Info, contentDescription = null)
+            Icon(Icons.Default.Language, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             Text("Visit CyberAsk Website")
         }
@@ -179,10 +180,11 @@ fun HelpScreen() {
         Spacer(Modifier.height(16.dp))
         
         OutlinedButton(
-            onClick = { uriHandler.openUri("https://www.cyberask.co.uk/privacy-policy") },
-            modifier = Modifier.fillMaxWidth()
+            onClick = { uriHandler.openUri("https://www.cyberask.co.uk/app-privacy.html/plan") },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
         ) {
-            Icon(Icons.Default.Info, contentDescription = null)
+            Icon(Icons.Default.Policy, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             Text("Privacy Policy")
         }
@@ -202,7 +204,7 @@ fun EmptyState(title: String, message: String, onAction: () -> Unit) {
         Spacer(Modifier.height(16.dp))
         Text(title, style = MaterialTheme.typography.titleLarge)
         Text(message, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp), textAlign = TextAlign.Center)
-        Button(onClick = onAction, modifier = Modifier.padding(top = 24.dp)) {
+        Button(onClick = onAction, modifier = Modifier.padding(top = 24.dp), shape = RoundedCornerShape(12.dp)) {
             Text("Go to Settings")
         }
     }
@@ -222,7 +224,7 @@ fun GroupsScreen(viewModel: NessusViewModel, state: NessusUiState) {
             items(state.groups) { group ->
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(group.name, fontWeight = FontWeight.Bold)
                             Text("Owner: ${group.owner ?: "System"}", style = MaterialTheme.typography.bodySmall)
                         }
@@ -252,7 +254,8 @@ fun GroupsScreen(viewModel: NessusViewModel, state: NessusUiState) {
                 OutlinedTextField(
                     value = newGroupName,
                     onValueChange = { newGroupName = it },
-                    label = { Text("Group Name") }
+                    label = { Text("Group Name") },
+                    shape = RoundedCornerShape(12.dp)
                 )
             },
             confirmButton = {
@@ -292,7 +295,8 @@ fun SettingsScreen(viewModel: NessusViewModel, state: NessusUiState) {
             label = { Text("Scanner API URL") },
             placeholder = { Text("https://cloud.tenable.com") },
             modifier = Modifier.fillMaxWidth(),
-            leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) }
+            leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+            shape = RoundedCornerShape(12.dp)
         )
 
         OutlinedTextField(
@@ -300,7 +304,8 @@ fun SettingsScreen(viewModel: NessusViewModel, state: NessusUiState) {
             onValueChange = { accessKey = it },
             label = { Text("Access Key") },
             modifier = Modifier.fillMaxWidth(),
-            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
+            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+            shape = RoundedCornerShape(12.dp)
         )
 
         OutlinedTextField(
@@ -308,14 +313,15 @@ fun SettingsScreen(viewModel: NessusViewModel, state: NessusUiState) {
             onValueChange = { secretKey = it },
             label = { Text("Secret Key") },
             modifier = Modifier.fillMaxWidth(),
-            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
+            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+            shape = RoundedCornerShape(12.dp)
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = { viewModel.saveSettings(baseUrl, accessKey, secretKey) },
                 modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(Icons.Default.Check, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
@@ -324,7 +330,7 @@ fun SettingsScreen(viewModel: NessusViewModel, state: NessusUiState) {
             OutlinedButton(
                 onClick = { viewModel.testConnection() },
                 modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
@@ -336,7 +342,7 @@ fun SettingsScreen(viewModel: NessusViewModel, state: NessusUiState) {
         
         Text("Management", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         
-        OutlinedButton(onClick = { showGroups = true }, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = { showGroups = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
             Icon(Icons.Default.Person, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             Text("Manage User Groups")
@@ -348,7 +354,7 @@ fun SettingsScreen(viewModel: NessusViewModel, state: NessusUiState) {
             onDismissRequest = { showGroups = false },
             title = { Text("User Groups") },
             text = {
-                Box(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.height(400.dp)) {
                     GroupsScreen(viewModel, state)
                 }
             },

@@ -68,27 +68,20 @@ class NessusViewModel(
         _uiState.update { it.copy(isDownloadingReport = true, message = "Requesting report generation...") }
         try {
             val fileId = repository().exportScan(scanId, chapters)
-            
-            // Poll status
             var status = "loading"
             while (status != "ready") {
                 delay(2000)
                 status = repository().getExportStatus(scanId, fileId)
                 _uiState.update { it.copy(message = "Generating report: $status...") }
             }
-            
-            _uiState.update { it.copy(message = "Downloading report...") }
             val responseBody = repository().downloadScan(scanId, fileId)
             val file = File(applicationContext.cacheDir, "scan-report-$scanId.pdf") 
-            
             responseBody.byteStream().use { input ->
-                FileOutputStream(file).use { output ->
-                    input.copyTo(output)
-                }
+                FileOutputStream(file).use { output -> input.copyTo(output) }
             }
-            _uiState.update { it.copy(downloadedFilePath = file.absolutePath, message = "Report downloaded successfully!") }
+            _uiState.update { it.copy(downloadedFilePath = file.absolutePath, message = "Report ready") }
         } catch (e: Exception) {
-            _uiState.update { it.copy(message = "Failed to generate report: ${e.message}") }
+            _uiState.update { it.copy(message = "Failed: ${e.message}") }
         } finally {
             _uiState.update { it.copy(isDownloadingReport = false) }
         }
@@ -97,7 +90,6 @@ class NessusViewModel(
     fun clearDownloadedFile() {
         _uiState.update { it.copy(downloadedFilePath = null) }
     }
-
 
     fun loadScans() = runManaged("Could not load scans") {
         val scans = repository().listScans()
@@ -112,7 +104,6 @@ class NessusViewModel(
             } else {
                 detail.history
             }
-            
             currentState.copy(
                 selectedScan = scan, 
                 selectedScanDetail = detail.copy(history = historyToKeep), 
@@ -144,36 +135,29 @@ class NessusViewModel(
         }
     }
 
-    fun updateScanName(scanId: Int, scanName: String) = runManaged("Could not update scan settings") {
-        repository().updateScanName(scanId, scanName)
-        loadScans()
-        _uiState.update { it.copy(message = "Scan settings updated") }
-    }
-
     fun startScan(scanId: Int) = runManaged("Could not start scan") {
         repository().startScan(scanId)
         loadScans()
-        _uiState.update { it.copy(message = "Scan started") }
     }
 
     fun stopScan(scanId: Int) = runManaged("Could not stop scan") {
         repository().stopScan(scanId)
         loadScans()
-        _uiState.update { it.copy(message = "Scan stopped") }
     }
 
     fun pauseScan(scanId: Int) = runManaged("Could not pause scan") {
         repository().pauseScan(scanId)
         loadScans()
-        _uiState.update { it.copy(message = "Scan paused") }
     }
 
+    fun resumeScan(scanId: Int) = runManaged("Could not resume scan") {
+        repository().resumeScan(scanId)
+        loadScans()
+    }
 
     fun deleteScan(scanId: Int) = runManaged("Could not delete scan") {
         repository().deleteScan(scanId)
-        _uiState.update { it.copy(selectedScan = null, selectedScanDetail = null, selectedPlugin = emptyList()) }
         loadScans()
-        _uiState.update { it.copy(message = "Scan deleted") }
     }
 
     fun loadGroups() = runManaged("Could not load groups") {
@@ -184,13 +168,11 @@ class NessusViewModel(
     fun createGroup(name: String) = runManaged("Could not create group") {
         repository().createGroup(name)
         loadGroups()
-        _uiState.update { it.copy(message = "Group created") }
     }
 
     fun deleteGroup(groupId: Int) = runManaged("Could not delete group") {
         repository().deleteGroup(groupId)
         loadGroups()
-        _uiState.update { it.copy(message = "Group deleted") }
     }
 
     fun loadAgentGroups() = runManaged("Could not load agent groups") {
@@ -198,9 +180,29 @@ class NessusViewModel(
         _uiState.update { it.copy(agentGroups = groups) }
     }
 
+    fun createAgentGroup(name: String) = runManaged("Could not create agent group") {
+        repository().createAgentGroup(name)
+        loadAgentGroups()
+    }
+
+    fun deleteAgentGroup(groupId: Int) = runManaged("Could not delete agent group") {
+        repository().deleteAgentGroup(groupId)
+        loadAgentGroups()
+    }
+
     fun loadGroupAgents(groupId: Int) = runManaged("Could not load agents in group") {
         val agents = repository().listAgentsInGroup(groupId)
         _uiState.update { it.copy(groupAgents = agents) }
+    }
+
+    fun addAgentToGroup(groupId: Int, agentId: Int) = runManaged("Could not add agent to group") {
+        repository().addAgentToGroup(groupId, agentId)
+        loadGroupAgents(groupId)
+    }
+
+    fun removeAgentFromGroup(groupId: Int, agentId: Int) = runManaged("Could not remove agent from group") {
+        repository().removeAgentFromGroup(groupId, agentId)
+        loadGroupAgents(groupId)
     }
 
     fun loadAgents() = runManaged("Could not load agents") {
@@ -211,7 +213,6 @@ class NessusViewModel(
     fun unlinkAgent(agentId: Int) = runManaged("Could not unlink agent") {
         repository().unlinkAgent(agentId)
         loadAgents()
-        _uiState.update { it.copy(message = "Agent unlinked") }
     }
     
     fun selectAgent(agent: NessusAgent?) {
@@ -227,13 +228,9 @@ class NessusViewModel(
     private fun runManaged(defaultError: String, block: suspend () -> Unit) {
         viewModelScope.launch {
             _uiState.update { it.copy(loading = true) }
-            try {
-                block()
-            } catch (e: Exception) {
+            try { block() } catch (e: Exception) {
                 _uiState.update { it.copy(message = e.message ?: defaultError) }
-            } finally {
-                _uiState.update { it.copy(loading = false) }
-            }
+            } finally { _uiState.update { it.copy(loading = false) } }
         }
     }
 
@@ -241,20 +238,15 @@ class NessusViewModel(
         fun factory(context: Context): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                val appContext = context.applicationContext
-                val store = SettingsStore(appContext)
-                val vm = NessusViewModel(store, { settings ->
+                val store = SettingsStore(context.applicationContext)
+                return NessusViewModel(store, { settings ->
                     NessusRepository(
                         settingsProvider = { settings },
                         apiFactory = NessusApiFactory {
-                            NessusAuth(
-                                accessKey = settings.accessKey,
-                                secretKey = settings.secretKey
-                            )
+                            NessusAuth(accessKey = settings.accessKey, secretKey = settings.secretKey)
                         }
                     )
-                }, appContext)
-                return vm as T
+                }, context.applicationContext) as T
             }
         }
     }
