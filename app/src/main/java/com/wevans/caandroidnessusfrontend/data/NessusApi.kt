@@ -24,12 +24,11 @@ internal class NessusAuthInterceptor(
         val auth = authProvider()
         val request = chain.request().newBuilder().apply {
             if (auth.accessKey.isNotBlank() && auth.secretKey.isNotBlank()) {
-                // Removing the space after semicolon as some API gateways are sensitive to it.
-                // Standard format: accessKey=...;secretKey=...
-                header("X-ApiKeys", "accessKey=${auth.accessKey};secretKey=${auth.secretKey}")
+                // Tenable API keys header format usually includes a space after the semicolon
+                header("X-ApiKeys", "accessKey=${auth.accessKey}; secretKey=${auth.secretKey}")
             }
             header("Accept", "application/json")
-            header("User-Agent", "NessusAndroidApp/1.1")
+            header("User-Agent", "CyberAskScanner/1.1 (Android)")
         }.build()
         return chain.proceed(request)
     }
@@ -60,13 +59,13 @@ interface NessusApiService {
     suspend fun startScan(@Path("id") id: Int, @Body body: Map<String, String> = emptyMap())
 
     @POST("scans/{id}/stop")
-    suspend fun stopScan(@Path("id") id: Int)
+    suspend fun stopScan(@Path("id") id: Int, @Body body: Map<String, String> = emptyMap())
 
     @POST("scans/{id}/pause")
-    suspend fun pauseScan(@Path("id") id: Int)
+    suspend fun pauseScan(@Path("id") id: Int, @Body body: Map<String, String> = emptyMap())
 
     @POST("scans/{id}/resume")
-    suspend fun resumeScan(@Path("id") id: Int)
+    suspend fun resumeScan(@Path("id") id: Int, @Body body: Map<String, String> = emptyMap())
 
     @DELETE("scans/{id}")
     suspend fun deleteScan(@Path("id") id: Int)
@@ -90,31 +89,31 @@ interface NessusApiService {
     suspend fun createGroup(@Body body: CreateGroupRequest)
 
     @DELETE("groups/{groupId}")
-    suspend fun deleteGroup(@Path("groupId") groupId: Int)
+    suspend fun deleteGroup(@Path("groupId") groupId: String)
 
-    @GET("scanners/{scannerId}/agent-groups")
-    suspend fun listAgentGroups(@Path("scannerId") scannerId: Int = 1): NessusAgentGroupsResponse
+    @GET("scanners/1/agent-groups")
+    suspend fun listAgentGroups(): NessusAgentGroupsResponse
 
-    @POST("scanners/{scannerId}/agent-groups")
-    suspend fun createAgentGroup(@Path("scannerId") scannerId: Int = 1, @Body body: CreateAgentGroupRequest)
+    @POST("scanners/1/agent-groups")
+    suspend fun createAgentGroup(@Body body: CreateAgentGroupRequest)
 
-    @DELETE("scanners/{scannerId}/agent-groups/{groupId}")
-    suspend fun deleteAgentGroup(@Path("groupId") groupId: Int, @Path("scannerId") scannerId: Int = 1)
+    @DELETE("scanners/1/agent-groups/{groupId}")
+    suspend fun deleteAgentGroup(@Path("groupId") groupId: String)
 
-    @GET("scanners/{scannerId}/agent-groups/{groupId}/agents")
-    suspend fun listAgentsInGroup(@Path("groupId") groupId: Int, @Path("scannerId") scannerId: Int = 1): NessusAgentsResponse
+    @GET("scanners/1/agent-groups/{groupId}/agents")
+    suspend fun listAgentsInGroup(@Path("groupId") groupId: String): NessusAgentsResponse
 
-    @PUT("scanners/{scannerId}/agent-groups/{groupId}/agents/{agentId}")
-    suspend fun addAgentToGroup(@Path("groupId") groupId: Int, @Path("agentId") agentId: Int, @Path("scannerId") scannerId: Int = 1)
+    @PUT("scanners/1/agent-groups/{groupId}/agents/{agentId}")
+    suspend fun addAgentToGroup(@Path("groupId") groupId: String, @Path("agentId") agentId: Int, @Body body: Map<String, String> = emptyMap())
 
-    @DELETE("scanners/{scannerId}/agent-groups/{groupId}/agents/{agentId}")
-    suspend fun removeAgentFromGroup(@Path("groupId") groupId: Int, @Path("agentId") agentId: Int, @Path("scannerId") scannerId: Int = 1)
+    @DELETE("scanners/1/agent-groups/{groupId}/agents/{agentId}")
+    suspend fun removeAgentFromGroup(@Path("groupId") groupId: String, @Path("agentId") agentId: Int)
 
-    @GET("scanners/{scannerId}/agents")
-    suspend fun listAgents(@Path("scannerId") scannerId: Int = 1): NessusAgentsResponse
+    @GET("scanners/1/agents")
+    suspend fun listAgents(): NessusAgentsResponse
 
-    @POST("scanners/{scannerId}/agents/{agentId}/unlink")
-    suspend fun unlinkAgent(@Path("scannerId") scannerId: Int = 1, @Path("agentId") agentId: Int)
+    @POST("scanners/1/agents/{agentId}/unlink")
+    suspend fun unlinkAgent(@Path("agentId") agentId: Int, @Body body: Map<String, String> = emptyMap())
 }
 
 class NessusApiFactory(

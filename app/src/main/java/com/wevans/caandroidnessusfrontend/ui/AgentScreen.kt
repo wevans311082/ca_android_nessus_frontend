@@ -33,7 +33,7 @@ fun AgentsScreen(viewModel: NessusViewModel, state: NessusUiState) {
             AgentGroupListScreen(navController, viewModel, state)
         }
         composable("agent_group_detail/{groupId}/{groupName}") { backStackEntry ->
-            val groupId = backStackEntry.arguments?.getString("groupId")?.toIntOrNull()
+            val groupId = backStackEntry.arguments?.getString("groupId")
             val groupName = backStackEntry.arguments?.getString("groupName") ?: "Group"
             if (groupId != null) {
                 AgentListScreen(navController, viewModel, state, groupId, groupName)
@@ -46,7 +46,7 @@ fun AgentsScreen(viewModel: NessusViewModel, state: NessusUiState) {
 fun AgentGroupListScreen(navController: NavController, viewModel: NessusViewModel, state: NessusUiState) {
     var showAddDialog by remember { mutableStateOf(false) }
     var newGroupName by remember { mutableStateOf("") }
-    var groupToDelete by remember { mutableStateOf<Int?>(null) }
+    var groupToDelete by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         floatingActionButton = {
@@ -139,7 +139,7 @@ fun AgentGroupListScreen(navController: NavController, viewModel: NessusViewMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AgentListScreen(navController: NavController, viewModel: NessusViewModel, state: NessusUiState, groupId: Int, groupName: String) {
+fun AgentListScreen(navController: NavController, viewModel: NessusViewModel, state: NessusUiState, groupId: String, groupName: String) {
     var showAddAgentDialog by remember { mutableStateOf(false) }
     var agentToUnlink by remember { mutableStateOf<NessusAgent?>(null) }
     var agentToRemoveFromGroup by remember { mutableStateOf<NessusAgent?>(null) }

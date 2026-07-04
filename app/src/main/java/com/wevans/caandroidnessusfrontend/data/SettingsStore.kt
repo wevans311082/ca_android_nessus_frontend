@@ -1,13 +1,14 @@
 package com.wevans.caandroidnessusfrontend.data
 
 import android.content.Context
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
-
-private val Context.dataStore by preferencesDataStore(name = "nessus_settings")
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.onStart
 
 data class NessusSettings(
     val baseUrl: String = "",
@@ -15,24 +16,36 @@ data class NessusSettings(
     val secretKey: String = ""
 )
 
-class SettingsStore(private val context: Context) {
-    private val baseUrlKey = stringPreferencesKey("base_url")
-    private val accessKeyPref = stringPreferencesKey("access_key")
-    private val secretKeyPref = stringPreferencesKey("secret_key")
+class SettingsStore(context: Context) {
+    private val masterKey = MasterKey.Builder(context)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build()
 
-    val settings: Flow<NessusSettings> = context.dataStore.data.map { prefs ->
-        NessusSettings(
-            baseUrl = prefs[baseUrlKey].orEmpty(),
-            accessKey = prefs[accessKeyPref].orEmpty(),
-            secretKey = prefs[secretKeyPref].orEmpty()
+    private val sharedPrefs = EncryptedSharedPreferences.create(
+        context,
+        "nessus_secure_settings",
+        masterKey,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+    )
+
+    private val _settingsFlow = MutableStateFlow(readSettings())
+    val settings: Flow<NessusSettings> = _settingsFlow
+
+    private fun readSettings(): NessusSettings {
+        return NessusSettings(
+            baseUrl = sharedPrefs.getString("base_url", "").orEmpty(),
+            accessKey = sharedPrefs.getString("access_key", "").orEmpty(),
+            secretKey = sharedPrefs.getString("secret_key", "").orEmpty()
         )
     }
 
-    suspend fun save(settings: NessusSettings) {
-        context.dataStore.edit { prefs ->
-            prefs[baseUrlKey] = settings.baseUrl.trim()
-            prefs[accessKeyPref] = settings.accessKey.trim()
-            prefs[secretKeyPref] = settings.secretKey.trim()
-        }
+    fun save(settings: NessusSettings) {
+        sharedPrefs.edit().apply {
+            putString("base_url", settings.baseUrl.trim())
+            putString("access_key", settings.accessKey.trim())
+            putString("secret_key", settings.secretKey.trim())
+        }.apply()
+        _settingsFlow.value = readSettings()
     }
 }

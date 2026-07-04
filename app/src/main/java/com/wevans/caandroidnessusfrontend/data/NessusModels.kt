@@ -87,12 +87,12 @@ data class PluginAttribute(
     @Json(name = "attribute_value") val value: String
 )
 
-data class NessusGroupsResponse(
+class NessusGroupsResponse(
     val groups: List<NessusGroup> = emptyList()
 )
 
 data class NessusGroup(
-    val id: Int,
+    val id: String, // String to support both Int and UUID
     val name: String,
     val owner: String? = null
 )
@@ -102,7 +102,7 @@ data class NessusAgentGroupsResponse(
 )
 
 data class NessusAgentGroup(
-    val id: Int,
+    val id: String, // Tenable.io uses UUIDs
     val name: String,
     @Json(name = "agents_count") val agentsCount: Int = 0
 )
@@ -141,14 +141,6 @@ data class ExportScanResponse(
 
 data class ExportStatusResponse(
     val status: String
-)
-
-data class StartScanRequest(
-    @Json(name = "alt_targets") val altTargets: List<String>? = null
-)
-
-data class ScanUuidResponse(
-    @Json(name = "scan_uuid") val scanUuid: String? = null
 )
 
 data class UpdateScanSettingsRequest(

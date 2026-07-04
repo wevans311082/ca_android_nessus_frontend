@@ -55,8 +55,13 @@ fun NessusFrontendTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.background.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            // For edge-to-edge (Android 15 / targetSdk 35): use transparent status bar.
+            // The app UI (Scaffold etc.) should handle insets where needed.
+            window.statusBarColor = Color.Transparent.toArgb()
+            val controller = WindowCompat.getInsetsController(window, view)
+            controller.isAppearanceLightStatusBars = !darkTheme
+            // Also handle navigation bar for full edge-to-edge feel
+            controller.isAppearanceLightNavigationBars = !darkTheme
         }
     }
 

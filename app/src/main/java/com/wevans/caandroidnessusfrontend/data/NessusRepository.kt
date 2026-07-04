@@ -53,19 +53,19 @@ class NessusRepository(
 
     suspend fun createGroup(name: String) = api().createGroup(CreateGroupRequest(name.trim()))
 
-    suspend fun deleteGroup(groupId: Int) = api().deleteGroup(groupId)
+    suspend fun deleteGroup(groupId: String) = api().deleteGroup(groupId)
 
     suspend fun listAgentGroups(): List<NessusAgentGroup> = api().listAgentGroups().groups
 
     suspend fun createAgentGroup(name: String) = api().createAgentGroup(body = CreateAgentGroupRequest(name.trim()))
 
-    suspend fun deleteAgentGroup(groupId: Int) = api().deleteAgentGroup(groupId)
+    suspend fun deleteAgentGroup(groupId: String) = api().deleteAgentGroup(groupId)
 
-    suspend fun listAgentsInGroup(groupId: Int): List<NessusAgent> = api().listAgentsInGroup(groupId).agents
+    suspend fun listAgentsInGroup(groupId: String): List<NessusAgent> = api().listAgentsInGroup(groupId).agents
 
-    suspend fun addAgentToGroup(groupId: Int, agentId: Int) = api().addAgentToGroup(groupId, agentId)
+    suspend fun addAgentToGroup(groupId: String, agentId: Int) = api().addAgentToGroup(groupId, agentId)
 
-    suspend fun removeAgentFromGroup(groupId: Int, agentId: Int) = api().removeAgentFromGroup(groupId, agentId)
+    suspend fun removeAgentFromGroup(groupId: String, agentId: Int) = api().removeAgentFromGroup(groupId, agentId)
 
     suspend fun listAgents(): List<NessusAgent> = api().listAgents().agents
 

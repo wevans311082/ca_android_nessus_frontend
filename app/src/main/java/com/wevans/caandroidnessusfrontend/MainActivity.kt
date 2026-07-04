@@ -3,6 +3,7 @@ package com.wevans.caandroidnessusfrontend
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.wevans.caandroidnessusfrontend.ui.NessusFrontendApp
@@ -15,6 +16,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         installSplashScreen()
+        enableEdgeToEdge()
         setContent {
             NessusFrontendTheme {
                 NessusFrontendApp(viewModel)

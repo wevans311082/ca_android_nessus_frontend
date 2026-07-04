@@ -15,8 +15,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.wevans.caandroidnessusfrontend.BuildConfig
 import com.wevans.caandroidnessusfrontend.ui.theme.NessusFrontendTheme
 import kotlinx.coroutines.launch
 
@@ -155,7 +158,7 @@ fun HelpScreen() {
         )
         Spacer(Modifier.height(16.dp))
         Text("CyberAsk Vulnerability Scanner", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-        Text("Version 1.1.0", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+        Text("Version ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
         
         Spacer(Modifier.height(32.dp))
         
@@ -180,7 +183,7 @@ fun HelpScreen() {
         Spacer(Modifier.height(16.dp))
         
         OutlinedButton(
-            onClick = { uriHandler.openUri("https://www.cyberask.co.uk/app-privacy.html/plan") },
+            onClick = { uriHandler.openUri("https://www.cyberask.co.uk/app-privacy.html") },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
         ) {
@@ -279,6 +282,7 @@ fun SettingsScreen(viewModel: NessusViewModel, state: NessusUiState) {
     var baseUrl by remember(state.settings.baseUrl) { mutableStateOf(state.settings.baseUrl) }
     var accessKey by remember(state.settings.accessKey) { mutableStateOf(state.settings.accessKey) }
     var secretKey by remember(state.settings.secretKey) { mutableStateOf(state.settings.secretKey) }
+    var secretKeyVisible by remember { mutableStateOf(false) }
     var showGroups by remember { mutableStateOf(false) }
 
     Column(
@@ -299,6 +303,16 @@ fun SettingsScreen(viewModel: NessusViewModel, state: NessusUiState) {
             shape = RoundedCornerShape(12.dp)
         )
 
+        val trimmedUrl = baseUrl.trim()
+        if (trimmedUrl.isNotBlank() && !trimmedUrl.startsWith("https://", ignoreCase = true)) {
+            Text(
+                "Warning: Using HTTP is insecure and may be blocked. Prefer https:// for Nessus/Tenable servers.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(start = 4.dp)
+            )
+        }
+
         OutlinedTextField(
             value = accessKey,
             onValueChange = { accessKey = it },
@@ -314,6 +328,15 @@ fun SettingsScreen(viewModel: NessusViewModel, state: NessusUiState) {
             label = { Text("Secret Key") },
             modifier = Modifier.fillMaxWidth(),
             leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+            trailingIcon = {
+                IconButton(onClick = { secretKeyVisible = !secretKeyVisible }) {
+                    Icon(
+                        imageVector = if (secretKeyVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        contentDescription = if (secretKeyVisible) "Hide secret key" else "Show secret key"
+                    )
+                }
+            },
+            visualTransformation = if (secretKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
             shape = RoundedCornerShape(12.dp)
         )
 

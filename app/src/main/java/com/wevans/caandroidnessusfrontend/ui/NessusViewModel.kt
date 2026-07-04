@@ -69,13 +69,29 @@ class NessusViewModel(
         try {
             val fileId = repository().exportScan(scanId, chapters)
             var status = "loading"
-            while (status != "ready") {
+            var attempts = 0
+            val maxAttempts = 150 // ~5 minutes at 2s intervals
+
+            while (status != "ready" && attempts < maxAttempts) {
                 delay(2000)
+                attempts++
                 status = repository().getExportStatus(scanId, fileId)
                 _uiState.update { it.copy(message = "Generating report: $status...") }
+
+                if (status.equals("error", ignoreCase = true) || status.equals("failed", ignoreCase = true)) {
+                    throw Exception("Report generation failed on server (status: $status)")
+                }
             }
+
+            if (status != "ready") {
+                throw Exception("Report generation timed out after ~5 minutes")
+            }
+
             val responseBody = repository().downloadScan(scanId, fileId)
-            val file = File(applicationContext.cacheDir, "scan-report-$scanId.pdf") 
+            // Clean previous report for this scan if present
+            val file = File(applicationContext.cacheDir, "scan-report-$scanId.pdf")
+            if (file.exists()) file.delete()
+
             responseBody.byteStream().use { input ->
                 FileOutputStream(file).use { output -> input.copyTo(output) }
             }
@@ -170,7 +186,7 @@ class NessusViewModel(
         loadGroups()
     }
 
-    fun deleteGroup(groupId: Int) = runManaged("Could not delete group") {
+    fun deleteGroup(groupId: String) = runManaged("Could not delete group") {
         repository().deleteGroup(groupId)
         loadGroups()
     }
@@ -185,22 +201,22 @@ class NessusViewModel(
         loadAgentGroups()
     }
 
-    fun deleteAgentGroup(groupId: Int) = runManaged("Could not delete agent group") {
+    fun deleteAgentGroup(groupId: String) = runManaged("Could not delete agent group") {
         repository().deleteAgentGroup(groupId)
         loadAgentGroups()
     }
 
-    fun loadGroupAgents(groupId: Int) = runManaged("Could not load agents in group") {
+    fun loadGroupAgents(groupId: String) = runManaged("Could not load agents in group") {
         val agents = repository().listAgentsInGroup(groupId)
         _uiState.update { it.copy(groupAgents = agents) }
     }
 
-    fun addAgentToGroup(groupId: Int, agentId: Int) = runManaged("Could not add agent to group") {
+    fun addAgentToGroup(groupId: String, agentId: Int) = runManaged("Could not add agent to group") {
         repository().addAgentToGroup(groupId, agentId)
         loadGroupAgents(groupId)
     }
 
-    fun removeAgentFromGroup(groupId: Int, agentId: Int) = runManaged("Could not remove agent from group") {
+    fun removeAgentFromGroup(groupId: String, agentId: Int) = runManaged("Could not remove agent from group") {
         repository().removeAgentFromGroup(groupId, agentId)
         loadGroupAgents(groupId)
     }
