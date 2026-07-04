@@ -13,7 +13,9 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,11 +44,22 @@ fun AgentsScreen(viewModel: NessusViewModel, state: NessusUiState) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AgentGroupListScreen(navController: NavController, viewModel: NessusViewModel, state: NessusUiState) {
     var showAddDialog by remember { mutableStateOf(false) }
     var newGroupName by remember { mutableStateOf("") }
     var groupToDelete by remember { mutableStateOf<String?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredGroups = if (searchQuery.isBlank()) {
+        state.agentGroups
+    } else {
+        state.agentGroups.filter { 
+            it.name.contains(searchQuery, ignoreCase = true) 
+            // add more fields if model has owner etc.
+        }
+    }
 
     Scaffold(
         floatingActionButton = {
@@ -55,34 +68,66 @@ fun AgentGroupListScreen(navController: NavController, viewModel: NessusViewMode
             }
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        PullToRefreshBox(
+            isRefreshing = state.loading,
+            onRefresh = {
+                viewModel.loadAgentGroups()
+                viewModel.loadAgents()
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
         ) {
-            item { Text("Agent Groups", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-            if (state.agentGroups.isEmpty()) {
-                item { Text("No agent groups found or access denied.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline) }
-            }
-            items(state.agentGroups, key = { it.id }) { group ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        navController.navigate("agent_group_detail/${group.id}/${group.name}")
-                    },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Group, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(16.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(group.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                            Text("Agents: ${group.agentsCount}", style = MaterialTheme.typography.bodySmall)
+            Column(modifier = Modifier.fillMaxSize()) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    placeholder = { Text("Search agent groups...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear Search")
+                            }
                         }
-                        IconButton(onClick = { groupToDelete = group.id }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete Group", tint = MaterialTheme.colorScheme.error)
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item { Text("Agent Groups", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+                    if (filteredGroups.isEmpty()) {
+                        item { Text("No agent groups found or access denied.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline) }
+                    }
+                    items(filteredGroups, key = { it.id }) { group ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                navController.navigate("agent_group_detail/${group.id}/${group.name}")
+                            },
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Group, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.width(16.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(group.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                    Text("Agents: ${group.agentsCount}", style = MaterialTheme.typography.bodySmall)
+                                }
+                                IconButton(onClick = { groupToDelete = group.id }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Delete Group", tint = MaterialTheme.colorScheme.error)
+                                }
+                            }
                         }
                     }
                 }
@@ -143,6 +188,7 @@ fun AgentListScreen(navController: NavController, viewModel: NessusViewModel, st
     var showAddAgentDialog by remember { mutableStateOf(false) }
     var agentToUnlink by remember { mutableStateOf<NessusAgent?>(null) }
     var agentToRemoveFromGroup by remember { mutableStateOf<NessusAgent?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(groupId) {
         viewModel.loadGroupAgents(groupId)
@@ -150,6 +196,17 @@ fun AgentListScreen(navController: NavController, viewModel: NessusViewModel, st
     }
 
     val agentsInGroup = state.groupAgents
+
+    val filteredAgents = if (searchQuery.isBlank()) {
+        agentsInGroup
+    } else {
+        agentsInGroup.filter { 
+            it.name.contains(searchQuery, ignoreCase = true) ||
+            (it.platform?.contains(searchQuery, ignoreCase = true) == true) ||
+            (it.ip?.contains(searchQuery, ignoreCase = true) == true) ||
+            (it.status?.contains(searchQuery, ignoreCase = true) == true)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -168,25 +225,60 @@ fun AgentListScreen(navController: NavController, viewModel: NessusViewModel, st
             )
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        PullToRefreshBox(
+            isRefreshing = state.loading,
+            onRefresh = {
+                viewModel.loadGroupAgents(groupId)
+                viewModel.loadAgents()
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
         ) {
-            if (agentsInGroup.isEmpty()) {
-                item { 
-                    Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No agents in this group.", color = MaterialTheme.colorScheme.outline)
+            Column(modifier = Modifier.fillMaxSize()) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    placeholder = { Text("Search agents in group...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear Search")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    if (filteredAgents.isEmpty()) {
+                        item { 
+                            Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
+                                Text(
+                                    if (agentsInGroup.isEmpty()) "No agents in this group." else "No matching agents.",
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+                    }
+                    items(filteredAgents) { agent ->
+                        AgentCard(
+                            agent = agent,
+                            onClick = { viewModel.selectAgent(agent) },
+                            onRemoveFromGroup = { agentToRemoveFromGroup = agent },
+                            onUnlink = { agentToUnlink = agent }
+                        )
                     }
                 }
-            }
-            items(agentsInGroup) { agent ->
-                AgentCard(
-                    agent = agent,
-                    onClick = { viewModel.selectAgent(agent) },
-                    onRemoveFromGroup = { agentToRemoveFromGroup = agent },
-                    onUnlink = { agentToUnlink = agent }
-                )
             }
         }
     }
@@ -238,7 +330,10 @@ fun AgentListScreen(navController: NavController, viewModel: NessusViewModel, st
             text = { Text("Are you sure you want to completely unlink ${agentToUnlink?.name}? This action cannot be undone easily.") },
             confirmButton = {
                 Button(onClick = {
-                    agentToUnlink?.let { viewModel.unlinkAgent(it.id) }
+                    agentToUnlink?.let { 
+                        viewModel.unlinkAgent(it.id)
+                        viewModel.loadGroupAgents(groupId) // ensure the current group list updates after unlink
+                    }
                     agentToUnlink = null
                 }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
                     Text("Unlink")
