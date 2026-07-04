@@ -28,6 +28,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("debug")
 
             // For local testing of release builds, configure signing here.
             // Recommended for Play Store: use Google Play App Signing (no local keystore needed for upload).

@@ -69,5 +69,5 @@ class NessusRepository(
 
     suspend fun listAgents(): List<NessusAgent> = api().listAgents().agents
 
-    suspend fun unlinkAgent(agentId: Int) = api().unlinkAgent(agentId = agentId)
+    suspend fun unlinkAgent(agentId: Int) = api().unlinkAgent(agentId)
 }

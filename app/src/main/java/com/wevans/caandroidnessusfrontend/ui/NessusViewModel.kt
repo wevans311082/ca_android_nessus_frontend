@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.wevans.caandroidnessusfrontend.data.*
 import kotlinx.coroutines.delay
+import retrofit2.HttpException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -216,7 +217,7 @@ class NessusViewModel(
         loadGroupAgents(groupId)
     }
 
-    fun removeAgentFromGroup(groupId: String, agentId: Int) = runManaged("Could not remove agent from group") {
+    fun removeAgentFromGroup(groupId: String, agentId: Int) = runManaged("Could not remove agent from group (API key may need 'Scan Manager' role)") {
         repository().removeAgentFromGroup(groupId, agentId)
         loadGroupAgents(groupId)
     }
@@ -226,7 +227,7 @@ class NessusViewModel(
         _uiState.update { it.copy(agents = agents) }
     }
 
-    fun unlinkAgent(agentId: Int) = runManaged("Could not unlink agent") {
+    fun unlinkAgent(agentId: Int) = runManaged("Could not unlink agent (check that your API key has Scan Manager [40] permissions)") {
         repository().unlinkAgent(agentId)
         loadAgents()
     }
@@ -245,7 +246,15 @@ class NessusViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(loading = true) }
             try { block() } catch (e: Exception) {
-                _uiState.update { it.copy(message = e.message ?: defaultError) }
+                val msg = when (e) {
+                    is HttpException -> {
+                        val code = e.code()
+                        if (code == 403) "$defaultError (HTTP 403 Forbidden — check Scan Manager permissions or try scanner ID 'null' instead of '1')"
+                        else "$defaultError (HTTP $code)"
+                    }
+                    else -> e.message ?: defaultError
+                }
+                _uiState.update { it.copy(message = msg) }
             } finally { _uiState.update { it.copy(loading = false) } }
         }
     }

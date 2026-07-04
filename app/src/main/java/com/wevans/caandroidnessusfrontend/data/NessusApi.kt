@@ -91,6 +91,13 @@ interface NessusApiService {
     @DELETE("groups/{groupId}")
     suspend fun deleteGroup(@Path("groupId") groupId: String)
 
+    // NOTE on scanner ID for agent endpoints:
+    // - Many on-prem Nessus Manager setups use "1"
+    // - Tenable Vulnerability Management (cloud.tenable.com) often uses "null" (see official reference)
+    // If you get 403 or 404 on agent/group operations, try changing the ID below.
+    // Official docs: https://developer.tenable.com/reference/agent-groups-delete-agent
+    //               https://developer.tenable.com/reference/agents-delete
+
     @GET("scanners/1/agent-groups")
     suspend fun listAgentGroups(): NessusAgentGroupsResponse
 
@@ -112,8 +119,10 @@ interface NessusApiService {
     @GET("scanners/1/agents")
     suspend fun listAgents(): NessusAgentsResponse
 
-    @POST("scanners/1/agents/{agentId}/unlink")
-    suspend fun unlinkAgent(@Path("agentId") agentId: Int, @Body body: Map<String, String> = emptyMap())
+    // FIXED: Was incorrectly POST /scanners/1/agents/{id}/unlink (caused 403s).
+    // Official: DELETE /scanners/{id}/agents/{agentId}   (requires Scan Manager permissions)
+    @DELETE("scanners/1/agents/{agentId}")
+    suspend fun unlinkAgent(@Path("agentId") agentId: Int)
 }
 
 class NessusApiFactory(
