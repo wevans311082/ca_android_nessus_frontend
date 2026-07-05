@@ -82,6 +82,14 @@ interface NessusApiService {
     @GET("scans/{scanId}/export/{fileId}/download")
     suspend fun downloadScan(@Path("scanId") scanId: Int, @Path("fileId") fileId: String): ResponseBody
 
+    // Scan creation support
+    @GET("editor/scan/templates")
+    suspend fun listScanTemplates(): ScanTemplatesResponse
+
+    @POST("scans")
+    suspend fun createScan(@Body body: CreateScanRequest): CreateScanResponse
+
+
     @GET("groups")
     suspend fun listGroups(): NessusGroupsResponse
 
@@ -98,31 +106,34 @@ interface NessusApiService {
     // Official docs: https://developer.tenable.com/reference/agent-groups-delete-agent
     //               https://developer.tenable.com/reference/agents-delete
 
-    @GET("scanners/1/agent-groups")
-    suspend fun listAgentGroups(): NessusAgentGroupsResponse
+    @GET("scanners")
+    suspend fun listScanners(): ScannersResponse
 
-    @POST("scanners/1/agent-groups")
-    suspend fun createAgentGroup(@Body body: CreateAgentGroupRequest)
+    @GET("scanners/{scannerId}/agent-groups")
+    suspend fun listAgentGroups(@Path("scannerId") scannerId: String): NessusAgentGroupsResponse
 
-    @DELETE("scanners/1/agent-groups/{groupId}")
-    suspend fun deleteAgentGroup(@Path("groupId") groupId: String)
+    @POST("scanners/{scannerId}/agent-groups")
+    suspend fun createAgentGroup(@Path("scannerId") scannerId: String, @Body body: CreateAgentGroupRequest)
 
-    @GET("scanners/1/agent-groups/{groupId}/agents")
-    suspend fun listAgentsInGroup(@Path("groupId") groupId: String): NessusAgentsResponse
+    @DELETE("scanners/{scannerId}/agent-groups/{groupId}")
+    suspend fun deleteAgentGroup(@Path("scannerId") scannerId: String, @Path("groupId") groupId: String)
 
-    @PUT("scanners/1/agent-groups/{groupId}/agents/{agentId}")
-    suspend fun addAgentToGroup(@Path("groupId") groupId: String, @Path("agentId") agentId: Int, @Body body: Map<String, String> = emptyMap())
+    @GET("scanners/{scannerId}/agent-groups/{groupId}/agents")
+    suspend fun listAgentsInGroup(@Path("scannerId") scannerId: String, @Path("groupId") groupId: String): NessusAgentsResponse
 
-    @DELETE("scanners/1/agent-groups/{groupId}/agents/{agentId}")
-    suspend fun removeAgentFromGroup(@Path("groupId") groupId: String, @Path("agentId") agentId: Int)
+    @PUT("scanners/{scannerId}/agent-groups/{groupId}/agents/{agentId}")
+    suspend fun addAgentToGroup(@Path("scannerId") scannerId: String, @Path("groupId") groupId: String, @Path("agentId") agentId: Int, @Body body: Map<String, String> = emptyMap())
 
-    @GET("scanners/1/agents")
-    suspend fun listAgents(): NessusAgentsResponse
+    @DELETE("scanners/{scannerId}/agent-groups/{groupId}/agents/{agentId}")
+    suspend fun removeAgentFromGroup(@Path("scannerId") scannerId: String, @Path("groupId") groupId: String, @Path("agentId") agentId: Int)
+
+    @GET("scanners/{scannerId}/agents")
+    suspend fun listAgents(@Path("scannerId") scannerId: String): NessusAgentsResponse
 
     // FIXED: Was incorrectly POST /scanners/1/agents/{id}/unlink (caused 403s).
     // Official: DELETE /scanners/{id}/agents/{agentId}   (requires Scan Manager permissions)
-    @DELETE("scanners/1/agents/{agentId}")
-    suspend fun unlinkAgent(@Path("agentId") agentId: Int)
+    @DELETE("scanners/{scannerId}/agents/{agentId}")
+    suspend fun unlinkAgent(@Path("scannerId") scannerId: String, @Path("agentId") agentId: Int)
 }
 
 class NessusApiFactory(

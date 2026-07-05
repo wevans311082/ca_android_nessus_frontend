@@ -36,8 +36,8 @@ class NessusRepository(
         api().updateScanSettings(scanId, UpdateScanSettingsRequest(ScanSettingsPayload(scanName)))
     }
     
-    suspend fun exportScan(scanId: Int, chapters: String): String {
-        val response = api().exportScan(scanId, ExportScanRequest(chapters = chapters))
+    suspend fun exportScan(scanId: Int, chapters: String, format: String = "pdf"): String {
+        val response = api().exportScan(scanId, ExportScanRequest(format = format, chapters = chapters))
         return response.fileId
     }
     
@@ -55,19 +55,29 @@ class NessusRepository(
 
     suspend fun deleteGroup(groupId: String) = api().deleteGroup(groupId)
 
-    suspend fun listAgentGroups(): List<NessusAgentGroup> = api().listAgentGroups().groups
+    suspend fun listAgentGroups(): List<NessusAgentGroup> = api().listAgentGroups(scannerId()).groups
 
-    suspend fun createAgentGroup(name: String) = api().createAgentGroup(body = CreateAgentGroupRequest(name.trim()))
+    suspend fun createAgentGroup(name: String) = api().createAgentGroup(scannerId(), body = CreateAgentGroupRequest(name.trim()))
 
-    suspend fun deleteAgentGroup(groupId: String) = api().deleteAgentGroup(groupId)
+    suspend fun deleteAgentGroup(groupId: String) = api().deleteAgentGroup(scannerId(), groupId)
 
-    suspend fun listAgentsInGroup(groupId: String): List<NessusAgent> = api().listAgentsInGroup(groupId).agents
+    suspend fun listAgentsInGroup(groupId: String): List<NessusAgent> = api().listAgentsInGroup(scannerId(), groupId).agents
 
-    suspend fun addAgentToGroup(groupId: String, agentId: Int) = api().addAgentToGroup(groupId, agentId)
+    suspend fun addAgentToGroup(groupId: String, agentId: Int) = api().addAgentToGroup(scannerId(), groupId, agentId)
 
-    suspend fun removeAgentFromGroup(groupId: String, agentId: Int) = api().removeAgentFromGroup(groupId, agentId)
+    suspend fun removeAgentFromGroup(groupId: String, agentId: Int) = api().removeAgentFromGroup(scannerId(), groupId, agentId)
 
-    suspend fun listAgents(): List<NessusAgent> = api().listAgents().agents
+    suspend fun listAgents(): List<NessusAgent> = api().listAgents(scannerId()).agents
 
-    suspend fun unlinkAgent(agentId: Int) = api().unlinkAgent(agentId)
+    suspend fun unlinkAgent(agentId: Int) = api().unlinkAgent(scannerId(), agentId)
+
+    suspend fun listScanners(): List<Scanner> = api().listScanners().scanners
+
+    // Scan creation
+    suspend fun listScanTemplates(): List<ScanTemplate> = api().listScanTemplates().templates
+
+    suspend fun createScan(request: CreateScanRequest): CreateScanResponse =
+        api().createScan(request)
+
+    private fun scannerId(): String = settingsProvider().scannerId.ifBlank { "1" }
 }

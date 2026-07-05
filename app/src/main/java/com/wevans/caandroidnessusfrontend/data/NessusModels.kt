@@ -158,3 +158,48 @@ data class CreateGroupRequest(
 data class CreateAgentGroupRequest(
     val name: String
 )
+
+data class Scanner(
+    val id: String? = null,
+    val name: String? = null,
+    val type: String? = null,
+    val status: String? = null,
+    val uuid: String? = null,
+    @Json(name = "last_connect") val lastConnect: Long? = null
+)
+
+data class ScannersResponse(
+    val scanners: List<Scanner> = emptyList()
+)
+
+// Scan Templates (for creating new scans)
+data class ScanTemplate(
+    val uuid: String,
+    val name: String,
+    val title: String? = null,
+    val description: String? = null,
+    val type: String? = null,           // "local", "agent", etc.
+    val cloud_only: Boolean? = null
+)
+
+data class ScanTemplatesResponse(
+    val templates: List<ScanTemplate> = emptyList()
+)
+
+// Request to create a scan
+data class CreateScanRequest(
+    val uuid: String,
+    val settings: CreateScanSettings
+)
+
+data class CreateScanSettings(
+    val name: String,
+    val description: String? = null,
+    val targets: String? = null,           // comma-separated for network scans
+    @Json(name = "agent_group_id") val agentGroupId: String? = null,  // for agent scans
+    val folder_id: Int? = null
+)
+
+data class CreateScanResponse(
+    val scan: ScanSummary? = null
+)

@@ -59,13 +59,8 @@ fun sharePdf(context: Context, path: String) {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         context.startActivity(Intent.createChooser(intent, "Share Report"))
-
-        // Clean up the temporary report file after launching the share dialog.
-        // The receiving app gets temporary URI permission.
-        file.delete()
     } catch (e: Exception) {
-        // Best effort cleanup even on error
-        if (file.exists()) file.delete()
+        // no-op for caller to handle
     }
 }
 

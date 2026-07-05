@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -39,6 +40,13 @@ fun AgentsScreen(viewModel: NessusViewModel, state: NessusUiState) {
             val groupName = backStackEntry.arguments?.getString("groupName") ?: "Group"
             if (groupId != null) {
                 AgentListScreen(navController, viewModel, state, groupId, groupName)
+            }
+        }
+        composable("add_to_group/{groupId}/{groupName}") { backStackEntry ->
+            val groupId = backStackEntry.arguments?.getString("groupId")
+            val groupName = backStackEntry.arguments?.getString("groupName") ?: "Group"
+            if (groupId != null) {
+                AddAgentToGroupScreen(navController, viewModel, state, groupId, groupName)
             }
         }
     }
@@ -185,7 +193,6 @@ fun AgentGroupListScreen(navController: NavController, viewModel: NessusViewMode
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AgentListScreen(navController: NavController, viewModel: NessusViewModel, state: NessusUiState, groupId: String, groupName: String) {
-    var showAddAgentDialog by remember { mutableStateOf(false) }
     var agentToUnlink by remember { mutableStateOf<NessusAgent?>(null) }
     var agentToRemoveFromGroup by remember { mutableStateOf<NessusAgent?>(null) }
     var searchQuery by remember { mutableStateOf("") }
@@ -218,7 +225,9 @@ fun AgentListScreen(navController: NavController, viewModel: NessusViewModel, st
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showAddAgentDialog = true }) {
+                    IconButton(onClick = {
+                        navController.navigate("add_to_group/${groupId}/${groupName}")
+                    }) {
                         Icon(Icons.Default.Add, contentDescription = "Add Agent to Group")
                     }
                 }
@@ -292,18 +301,6 @@ fun AgentListScreen(navController: NavController, viewModel: NessusViewModel, st
         }
     }
 
-    if (showAddAgentDialog) {
-        AddAgentToGroupDialog(
-            allAgents = state.agents,
-            currentGroupAgents = agentsInGroup,
-            onDismiss = { showAddAgentDialog = false },
-            onAdd = { agentId ->
-                viewModel.addAgentToGroup(groupId, agentId)
-                showAddAgentDialog = false
-            }
-        )
-    }
-
     if (agentToRemoveFromGroup != null) {
         AlertDialog(
             onDismissRequest = { agentToRemoveFromGroup = null },
@@ -346,35 +343,175 @@ fun AgentListScreen(navController: NavController, viewModel: NessusViewModel, st
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddAgentToGroupDialog(allAgents: List<NessusAgent>, currentGroupAgents: List<NessusAgent>, onDismiss: () -> Unit, onAdd: (Int) -> Unit) {
-    val currentIds = currentGroupAgents.map { it.id }.toSet()
-    val availableAgents = allAgents.filter { it.id !in currentIds }
+fun AddAgentToGroupScreen(
+    navController: NavController,
+    viewModel: NessusViewModel,
+    state: NessusUiState,
+    groupId: String,
+    groupName: String
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedIds by remember { mutableStateOf(setOf<Int>()) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add Agent to Group") },
-        text = {
-            if (availableAgents.isEmpty()) {
-                Text("No available agents to add.")
+    val currentIds = state.groupAgents.map { it.id }.toSet()
+    val availableAgents = state.agents.filter { it.id !in currentIds }
+
+    val filteredAgents = if (searchQuery.isBlank()) {
+        availableAgents
+    } else {
+        availableAgents.filter {
+            it.name.contains(searchQuery, ignoreCase = true) ||
+            (it.platform?.contains(searchQuery, ignoreCase = true) == true) ||
+            (it.ip?.contains(searchQuery, ignoreCase = true) == true)
+        }
+    }
+
+    fun toggleSelection(id: Int) {
+        selectedIds = if (selectedIds.contains(id)) {
+            selectedIds - id
+        } else {
+            selectedIds + id
+        }
+    }
+
+    fun addSelected() {
+        selectedIds.forEach { id ->
+            viewModel.addAgentToGroup(groupId, id)
+        }
+        viewModel.loadGroupAgents(groupId)
+        viewModel.loadAgents()
+        selectedIds = emptySet()
+        // Optionally pop after adding
+        navController.popBackStack()
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Add to $groupName") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (selectedIds.isNotEmpty()) {
+                        TextButton(onClick = { addSelected() }) {
+                            Text("Add (${selectedIds.size})")
+                        }
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                placeholder = { Text("Search available agents...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear")
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            if (filteredAgents.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        if (availableAgents.isEmpty()) "All agents are already in this group." 
+                        else "No matching agents found.",
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
             } else {
-                LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
-                    items(availableAgents) { agent ->
-                        ListItem(
-                            headlineContent = { Text(agent.name) },
-                            supportingContent = { Text(agent.platform ?: "") },
-                            leadingContent = { Icon(Icons.Default.Person, null) },
-                            modifier = Modifier.clickable { onAdd(agent.id) }
-                        )
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(filteredAgents, key = { it.id }) { agent ->
+                        val isSelected = selectedIds.contains(agent.id)
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { toggleSelection(agent.id) },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isSelected) 
+                                    MaterialTheme.colorScheme.primaryContainer 
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = isSelected,
+                                    onCheckedChange = { toggleSelection(agent.id) }
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(Modifier.width(16.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(agent.name, fontWeight = FontWeight.Medium)
+                                    Text(
+                                        listOfNotNull(agent.platform, agent.ip, agent.status).joinToString(" • "),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                                if (isSelected) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = "Select to add",
+                                        tint = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+
+            if (selectedIds.isNotEmpty()) {
+                Button(
+                    onClick = { addSelected() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text("Add ${selectedIds.size} Selected Agent(s) to Group")
+                }
+            }
         }
-    )
+    }
 }
 
 @Composable

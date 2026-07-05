@@ -13,7 +13,11 @@ import kotlinx.coroutines.flow.onStart
 data class NessusSettings(
     val baseUrl: String = "",
     val accessKey: String = "",
-    val secretKey: String = ""
+    val secretKey: String = "",
+    val scannerId: String = "1",  // Default for many on-prem; "null" for Tenable.io cloud
+    val pollingIntervalMs: Long = 2000,
+    val exportTimeoutSeconds: Int = 300,
+    val requireBiometric: Boolean = false
 )
 
 class SettingsStore(context: Context) {
@@ -36,7 +40,11 @@ class SettingsStore(context: Context) {
         return NessusSettings(
             baseUrl = sharedPrefs.getString("base_url", "").orEmpty(),
             accessKey = sharedPrefs.getString("access_key", "").orEmpty(),
-            secretKey = sharedPrefs.getString("secret_key", "").orEmpty()
+            secretKey = sharedPrefs.getString("secret_key", "").orEmpty(),
+            scannerId = sharedPrefs.getString("scanner_id", "1").orEmpty().ifBlank { "1" },
+            pollingIntervalMs = sharedPrefs.getLong("polling_interval_ms", 2000),
+            exportTimeoutSeconds = sharedPrefs.getInt("export_timeout_sec", 300),
+            requireBiometric = sharedPrefs.getBoolean("require_biometric", false)
         )
     }
 
@@ -45,6 +53,10 @@ class SettingsStore(context: Context) {
             putString("base_url", settings.baseUrl.trim())
             putString("access_key", settings.accessKey.trim())
             putString("secret_key", settings.secretKey.trim())
+            putString("scanner_id", settings.scannerId.trim().ifBlank { "1" })
+            putLong("polling_interval_ms", settings.pollingIntervalMs)
+            putInt("export_timeout_sec", settings.exportTimeoutSeconds)
+            putBoolean("require_biometric", settings.requireBiometric)
         }.apply()
         _settingsFlow.value = readSettings()
     }

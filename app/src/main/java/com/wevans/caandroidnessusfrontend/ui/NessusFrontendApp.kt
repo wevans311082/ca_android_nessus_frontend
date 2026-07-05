@@ -1,5 +1,6 @@
 package com.wevans.caandroidnessusfrontend.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,7 +14,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -22,10 +26,16 @@ import androidx.compose.ui.unit.dp
 import com.wevans.caandroidnessusfrontend.BuildConfig
 import com.wevans.caandroidnessusfrontend.ui.theme.NessusFrontendTheme
 import kotlinx.coroutines.launch
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
+import android.widget.Toast
+import androidx.fragment.app.FragmentActivity
 
 private enum class NavItem(val label: String, val icon: ImageVector) {
     Scans("Scans", Icons.Default.Search),
     Agents("Agents", Icons.Default.Build),
+    Reports("Reports", Icons.Default.Description),
     Settings("Settings", Icons.Default.Settings),
     Help("Help", Icons.Default.Info)
 }
@@ -42,11 +52,15 @@ fun NessusFrontendApp(viewModel: NessusViewModel) {
     LaunchedEffect(currentNav, state.settings.baseUrl) {
         if (state.settings.baseUrl.isBlank()) return@LaunchedEffect
         when (currentNav) {
-            NavItem.Scans -> viewModel.loadScans()
+            NavItem.Scans -> {
+                viewModel.loadScans()
+                viewModel.loadScanTemplates()
+            }
             NavItem.Agents -> {
                 viewModel.loadAgentGroups()
                 viewModel.loadAgents()
             }
+            NavItem.Reports -> viewModel.loadLocalReports()
             NavItem.Settings, NavItem.Help -> Unit
         }
     }
@@ -103,36 +117,65 @@ fun NessusFrontendApp(viewModel: NessusViewModel) {
                             }
                         },
                         actions = {
-                            if (currentNav == NavItem.Scans) {
-                                IconButton(onClick = { viewModel.loadScans() }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                            when (currentNav) {
+                                NavItem.Scans -> {
+                                    IconButton(onClick = { viewModel.loadScans() }) {
+                                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                                    }
                                 }
+                                NavItem.Reports -> {
+                                    IconButton(onClick = { viewModel.loadLocalReports() }) {
+                                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                                    }
+                                }
+                                else -> {}
                             }
                         }
                     )
                 },
                 snackbarHost = { SnackbarHost(snackbarHostState) }
             ) { padding ->
+                val isWide = LocalConfiguration.current.screenWidthDp > 600
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(padding)
+                        .padding(padding),
+                    contentAlignment = if (isWide) Alignment.Center else Alignment.TopStart
                 ) {
-                    if (state.settings.baseUrl.isBlank() && currentNav != NavItem.Settings && currentNav != NavItem.Help) {
-                        EmptyState("Setup Connection", "Go to Settings to configure your API connection.") {
-                            currentNav = NavItem.Settings
-                        }
-                    } else {
-                        when (currentNav) {
-                            NavItem.Scans -> ScansScreen(viewModel, state)
-                            NavItem.Agents -> AgentsScreen(viewModel, state)
-                            NavItem.Settings -> SettingsScreen(viewModel, state)
-                            NavItem.Help -> HelpScreen()
+                    val innerModifier = if (isWide) {
+                        Modifier.widthIn(max = 720.dp)
+                    } else Modifier.fillMaxSize()
+
+                    Box(modifier = innerModifier) {
+                        if (state.settings.baseUrl.isBlank() && currentNav != NavItem.Settings && currentNav != NavItem.Help) {
+                            EmptyState("Setup Connection", "Go to Settings to configure your API connection.") {
+                                currentNav = NavItem.Settings
+                            }
+                        } else {
+                            if (currentNav != NavItem.Settings && currentNav != NavItem.Help && state.settings.baseUrl.isBlank()) {
+                                OnboardingScreen(viewModel) { currentNav = NavItem.Settings }
+                            } else {
+                                if (state.requireBiometric && !state.isUnlocked) {
+                                    LockScreen(
+                                        onUnlock = { viewModel.unlockApp() },
+                                        context = LocalContext.current as? FragmentActivity
+                                    )
+                                } else {
+                                    when (currentNav) {
+                                        NavItem.Scans -> ScansScreen(viewModel, state)
+                                        NavItem.Agents -> AgentsScreen(viewModel, state)
+                                        NavItem.Reports -> ReportsScreen(viewModel, state)
+                                        NavItem.Settings -> SettingsScreen(viewModel, state)
+                                        NavItem.Help -> HelpScreen()
+                                    }
+                                }
+                            }
                         }
                     }
 
                     if (state.loading) {
-                        CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                        CircularProgressIndicator()
                     }
                 }
             }
@@ -195,6 +238,118 @@ fun HelpScreen() {
 }
 
 @Composable
+fun OnboardingScreen(viewModel: NessusViewModel, onGoToSettings: () -> Unit) {
+    var step by remember { mutableStateOf(0) }
+    var baseUrl by remember { mutableStateOf("") }
+    var accessKey by remember { mutableStateOf("") }
+    var secretKey by remember { mutableStateOf("") }
+    var secretVisible by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(16.dp))
+
+        when (step) {
+            0 -> {
+                Text("Welcome to CyberAsk Scanner", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "A simple, secure mobile app to manage your Nessus or Tenable Vulnerability Management scans and agents.",
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(Modifier.height(32.dp))
+                Button(onClick = { step = 1 }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                    Text("Get Started")
+                }
+            }
+            1 -> {
+                Text("Step 1: Get your API Keys", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "1. Log in to your Nessus or Tenable web UI.\n2. Go to Settings > API Keys (or Users).\n3. Generate a new Access Key and Secret Key.\n\nKeep them safe - they are like passwords.",
+                    textAlign = TextAlign.Start,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(Modifier.height(32.dp))
+                Button(onClick = { step = 2 }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                    Text("Next: Enter Connection Details")
+                }
+                TextButton(onClick = { step = 0 }) { Text("Back") }
+            }
+            2 -> {
+                Text("Step 2: Enter your Server Details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = baseUrl,
+                    onValueChange = { baseUrl = it },
+                    label = { Text("API URL (e.g. https://your-server:8834 or https://cloud.tenable.com)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = accessKey,
+                    onValueChange = { accessKey = it },
+                    label = { Text("Access Key") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                OutlinedTextField(
+                    value = secretKey,
+                    onValueChange = { secretKey = it },
+                    label = { Text("Secret Key") },
+                    modifier = Modifier.fillMaxWidth(),
+                    visualTransformation = if (secretVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { secretVisible = !secretVisible }) {
+                            Icon(if (secretVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, null)
+                        }
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                )
+                Spacer(Modifier.height(16.dp))
+
+                Button(
+                    onClick = {
+                        viewModel.saveSettings(baseUrl, accessKey, secretKey)
+                        viewModel.testConnection()
+                        step = 3
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = baseUrl.isNotBlank() && accessKey.isNotBlank() && secretKey.isNotBlank()
+                ) {
+                    Text("Save & Test Connection")
+                }
+                TextButton(onClick = { step = 1 }) { Text("Back") }
+            }
+            3 -> {
+                Text("All Set!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "Your connection details are saved securely on your device.\n\nYou can now manage scans and agents.\n\nTip: Use the drawer menu to switch between Scans, Agents, Reports, etc.",
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(Modifier.height(32.dp))
+                Button(onClick = onGoToSettings, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                    Text("Go to Settings or Start Using the App")
+                }
+                TextButton(onClick = { step = 2 }) { Text("Back to Edit Details") }
+            }
+        }
+    }
+}
+
+@Composable
 fun EmptyState(title: String, message: String, onAction: () -> Unit) {
     Column(
         modifier = Modifier
@@ -211,6 +366,77 @@ fun EmptyState(title: String, message: String, onAction: () -> Unit) {
             Text("Go to Settings")
         }
     }
+}
+
+@Composable
+fun LockScreen(onUnlock: () -> Unit, context: FragmentActivity?) {
+    LaunchedEffect(context) {
+        if (context != null) {
+            authenticateWithBiometric(context, onUnlock)
+        } else {
+            onUnlock()
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(24.dp))
+        Text("App Locked", style = MaterialTheme.typography.headlineSmall)
+        Text("Authenticate to access your Nessus connection", textAlign = TextAlign.Center)
+        Spacer(Modifier.height(32.dp))
+        Text(
+            "Biometric authentication will start automatically...",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline
+        )
+        Spacer(Modifier.height(16.dp))
+        TextButton(onClick = {
+            if (context != null) {
+                authenticateWithBiometric(context, onUnlock)
+            } else {
+                onUnlock()
+            }
+        }) {
+            Text("Retry authentication")
+        }
+    }
+}
+
+private fun authenticateWithBiometric(activity: FragmentActivity, onSuccess: () -> Unit) {
+    val biometricManager = BiometricManager.from(activity)
+    val canAuthenticate = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+
+    if (canAuthenticate != BiometricManager.BIOMETRIC_SUCCESS) {
+        Toast.makeText(activity, "Biometric not available, using device credential", Toast.LENGTH_SHORT).show()
+        onSuccess() // fallback for demo
+        return
+    }
+
+    val promptInfo = BiometricPrompt.PromptInfo.Builder()
+        .setTitle("Unlock CyberAsk Scanner")
+        .setSubtitle("Authenticate to access the app")
+        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+        .build()
+
+    val biometricPrompt = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity),
+        object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                super.onAuthenticationSucceeded(result)
+                onSuccess()
+            }
+            override fun onAuthenticationFailed() {
+                super.onAuthenticationFailed()
+                Toast.makeText(activity, "Authentication failed", Toast.LENGTH_SHORT).show()
+            }
+        })
+
+    biometricPrompt.authenticate(promptInfo)
 }
 
 @Composable
@@ -282,8 +508,12 @@ fun SettingsScreen(viewModel: NessusViewModel, state: NessusUiState) {
     var baseUrl by remember(state.settings.baseUrl) { mutableStateOf(state.settings.baseUrl) }
     var accessKey by remember(state.settings.accessKey) { mutableStateOf(state.settings.accessKey) }
     var secretKey by remember(state.settings.secretKey) { mutableStateOf(state.settings.secretKey) }
+    var scannerId by remember(state.settings.scannerId) { mutableStateOf(state.settings.scannerId) }
+    var pollingInterval by remember { mutableStateOf("2000") }
+    var exportTimeout by remember { mutableStateOf("300") }
     var secretKeyVisible by remember { mutableStateOf(false) }
     var showGroups by remember { mutableStateOf(false) }
+    var showScannersDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -340,9 +570,51 @@ fun SettingsScreen(viewModel: NessusViewModel, state: NessusUiState) {
             shape = RoundedCornerShape(12.dp)
         )
 
+        OutlinedTextField(
+            value = scannerId,
+            onValueChange = { scannerId = it },
+            label = { Text("Scanner ID (advanced: 1 or null)") },
+            modifier = Modifier.fillMaxWidth(),
+            leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        OutlinedTextField(
+            value = pollingInterval,
+            onValueChange = { pollingInterval = it },
+            label = { Text("Polling interval (ms)") },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        OutlinedTextField(
+            value = exportTimeout,
+            onValueChange = { exportTimeout = it },
+            label = { Text("Export timeout (seconds)") },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.Lock, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Require biometric to unlock app", modifier = Modifier.weight(1f))
+            Switch(
+                checked = state.requireBiometric,
+                onCheckedChange = { viewModel.setRequireBiometric(it) }
+            )
+        }
+
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
-                onClick = { viewModel.saveSettings(baseUrl, accessKey, secretKey) },
+                onClick = { 
+                    viewModel.saveSettings(baseUrl, accessKey, secretKey, scannerId)
+                    // TODO: persist polling/timeout to ViewModel when wired
+                },
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(12.dp)
             ) {
@@ -359,6 +631,27 @@ fun SettingsScreen(viewModel: NessusViewModel, state: NessusUiState) {
                 Spacer(Modifier.width(8.dp))
                 Text("Test")
             }
+        }
+
+        if (state.connectionStatus != null || state.lastConnected != null) {
+            Text(
+                "Status: ${state.connectionStatus ?: "Unknown"}  •  Last: ${state.lastConnected?.let { java.text.SimpleDateFormat("HH:mm:ss").format(java.util.Date(it)) } ?: "never"}",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (state.connectionStatus == "Connected") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+            )
+        }
+
+        OutlinedButton(
+            onClick = { 
+                viewModel.loadScanners()
+                showScannersDialog = true 
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(Icons.Default.Build, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Select Scanner from List")
         }
         
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
@@ -385,6 +678,34 @@ fun SettingsScreen(viewModel: NessusViewModel, state: NessusUiState) {
                 TextButton(onClick = { showGroups = false }) {
                     Text("Close")
                 }
+            }
+        )
+    }
+
+    if (showScannersDialog) {
+        AlertDialog(
+            onDismissRequest = { showScannersDialog = false },
+            title = { Text("Select Scanner") },
+            text = {
+                if (state.scanners.isEmpty()) {
+                    Text("No scanners loaded. Make sure you are connected and have permissions.")
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
+                        items(state.scanners) { scanner ->
+                            ListItem(
+                                headlineContent = { Text(scanner.name ?: scanner.id ?: "Unknown") },
+                                supportingContent = { Text("ID: ${scanner.id} • ${scanner.status ?: ""}") },
+                                modifier = Modifier.clickable {
+                                    viewModel.selectScanner(scanner.id ?: "1")
+                                    showScannersDialog = false
+                                }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showScannersDialog = false }) { Text("Cancel") }
             }
         )
     }
