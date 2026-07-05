@@ -53,6 +53,236 @@ import java.io.File
 import com.wevans.caandroidnessusfrontend.data.*
 import java.util.*
 
+// --- Create Scan Screens ---
+
+@Composable
+fun TemplatePickerScreen(
+    navController: NavController,
+    viewModel: NessusViewModel,
+    state: NessusUiState
+) {
+    LaunchedEffect(Unit) {
+        if (state.scanTemplates.isEmpty()) {
+            viewModel.loadScanTemplates()
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+            Text(
+                "Pick Scan Template",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(start = 8.dp)
+            )
+        }
+
+        if (state.scanTemplates.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(state.scanTemplates) { template ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                navController.navigate("create_scan/${template.uuid}")
+                            },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                template.title ?: template.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            template.description?.let {
+                                Text(
+                                    it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                            val typeLabel = when {
+                                template.type?.contains("agent", ignoreCase = true) == true ||
+                                template.name.contains("agent", ignoreCase = true) -> "Agent Scan"
+                                else -> "Advanced / Network Scan"
+                            }
+                            Text(
+                                typeLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CreateScanScreen(
+    navController: NavController,
+    viewModel: NessusViewModel,
+    state: NessusUiState,
+    templateUuid: String
+) {
+    val template = state.scanTemplates.find { it.uuid == templateUuid }
+
+    if (template == null) {
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text("Template not found. Please go back and select a template again.")
+            Button(onClick = { navController.popBackStack() }) { Text("Back") }
+        }
+        return
+    }
+
+    var name by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var targets by remember { mutableStateOf("") }
+    var selectedAgentGroupId by remember { mutableStateOf<String?>(null) }
+
+    val isAgent = template.let {
+        it.type?.contains("agent", ignoreCase = true) == true ||
+        it.name.contains("agent", ignoreCase = true)
+    }
+
+    LaunchedEffect(isAgent) {
+        if (isAgent && state.agentGroups.isEmpty()) {
+            viewModel.loadAgentGroups()
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+            Text(
+                "Create New Scan",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(start = 8.dp)
+            )
+        }
+
+        Text(
+            "Template: ${template.title ?: template.name}",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Scan Name *") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        )
+
+        OutlinedTextField(
+            value = description,
+            onValueChange = { description = it },
+            label = { Text("Description") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        )
+
+        if (isAgent) {
+            Spacer(Modifier.height(8.dp))
+            Text("Agent Group *", modifier = Modifier.padding(horizontal = 16.dp))
+            if (state.agentGroups.isEmpty()) {
+                Text("Loading agent groups...", modifier = Modifier.padding(horizontal = 16.dp))
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 200.dp)
+                        .padding(horizontal = 16.dp)
+                ) {
+                    items(state.agentGroups) { group ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedAgentGroupId = group.id }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedAgentGroupId == group.id,
+                                onClick = { selectedAgentGroupId = group.id }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("${group.name} (${group.agentsCount} agents)")
+                        }
+                    }
+                }
+            }
+        } else {
+            OutlinedTextField(
+                value = targets,
+                onValueChange = { targets = it },
+                label = { Text("Targets *") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                placeholder = { Text("192.168.1.0/24, 10.0.0.5") }
+            )
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        Button(
+            onClick = {
+                viewModel.createScanFromTemplate(
+                    templateUuid = templateUuid,
+                    name = name,
+                    description = description,
+                    targets = if (isAgent) null else targets.ifBlank { null },
+                    agentGroupId = selectedAgentGroupId
+                )
+                // Go back to the scan list
+                navController.popBackStack("scan_list", inclusive = false)
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            enabled = name.isNotBlank() &&
+                    (if (isAgent) selectedAgentGroupId != null else targets.isNotBlank()) &&
+                    !state.isCreatingScan
+        ) {
+            if (state.isCreatingScan) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+            }
+            Text("Create Scan")
+        }
+    }
+}
+
 // --- Navigation & Main Screens ---
 
 @Composable
@@ -66,6 +296,13 @@ fun ScansScreen(viewModel: NessusViewModel, state: NessusUiState) {
         composable("scan_detail/{scanId}") {
             ScanDetailScreen(navController, viewModel, state)
         }
+        composable("template_picker") {
+            TemplatePickerScreen(navController, viewModel, state)
+        }
+        composable("create_scan/{templateUuid}") { backStackEntry ->
+            val uuid = backStackEntry.arguments?.getString("templateUuid") ?: ""
+            CreateScanScreen(navController, viewModel, state, uuid)
+        }
     }
 }
 
@@ -75,7 +312,6 @@ fun ScanListScreen(navController: NavController, viewModel: NessusViewModel, sta
     var searchQuery by remember { mutableStateOf("") }
     var selectedScans by remember { mutableStateOf(setOf<Int>()) }
     var isBulkMode by remember { mutableStateOf(false) }
-    var showTemplatePicker by remember { mutableStateOf(false) }
     
     val filteredScans = if (searchQuery.isBlank()) {
         state.scans
@@ -136,7 +372,7 @@ fun ScanListScreen(navController: NavController, viewModel: NessusViewModel, sta
                         if (state.scanTemplates.isEmpty()) {
                             viewModel.loadScanTemplates()
                         }
-                        showTemplatePicker = true
+                        navController.navigate("template_picker")
                     }) {
                         Icon(Icons.Default.Add, contentDescription = null)
                         Spacer(Modifier.width(4.dp))
@@ -196,87 +432,6 @@ fun ScanListScreen(navController: NavController, viewModel: NessusViewModel, sta
                 }
             }
         }
-    }
-
-    if (showTemplatePicker) {
-        // Combined picker + details for simplicity and to surface template choice first
-        var pickedTemplate by remember { mutableStateOf<ScanTemplate?>(null) }
-        var name by remember { mutableStateOf("") }
-        var desc by remember { mutableStateOf("") }
-        var targs by remember { mutableStateOf("") }
-        var agId by remember { mutableStateOf<String?>(null) }
-
-        val isAgent = pickedTemplate?.let { 
-            it.type?.contains("agent", true) == true || it.name.contains("agent", true) 
-        } ?: false
-
-        AlertDialog(
-            onDismissRequest = { showTemplatePicker = false },
-            title = { Text(if (pickedTemplate == null) "Pick a Template" else "Create Scan: ${pickedTemplate!!.title ?: pickedTemplate!!.name}") },
-            text = {
-                Column {
-                    if (pickedTemplate == null) {
-                        if (state.scanTemplates.isEmpty()) {
-                            Text("Loading templates...")
-                        } else {
-                            LazyColumn(Modifier.heightIn(max = 280.dp)) {
-                                items(state.scanTemplates) { tmpl ->
-                                    Row(
-                                        Modifier.fillMaxWidth().clickable { pickedTemplate = tmpl }.padding(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        RadioButton(selected = false, onClick = { pickedTemplate = tmpl })
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(tmpl.title ?: tmpl.name)
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        Text("Selected: ${pickedTemplate!!.title ?: pickedTemplate!!.name}")
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name *") }, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth())
-
-                        if (isAgent) {
-                            if (state.agentGroups.isEmpty()) {
-                                LaunchedEffect(true) { viewModel.loadAgentGroups() }
-                                Text("Loading agent groups...")
-                            } else {
-                                Text("Agent Group")
-                                LazyColumn(Modifier.height(100.dp)) {
-                                    items(state.agentGroups) { g ->
-                                        Row(Modifier.clickable { agId = g.id }.padding(4.dp)) {
-                                            RadioButton(selected = agId == g.id, onClick = { agId = g.id })
-                                            Text(" ${g.name}")
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            OutlinedTextField(value = targs, onValueChange = { targs = it }, label = { Text("Targets") }, modifier = Modifier.fillMaxWidth())
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (pickedTemplate == null) return@Button
-                        viewModel.createScanFromTemplate(pickedTemplate!!.uuid, name, desc, if (isAgent) null else targs, agId)
-                        showTemplatePicker = false
-                        pickedTemplate = null
-                    },
-                    enabled = pickedTemplate != null && name.isNotBlank() && (if (isAgent) agId != null else true)
-                ) { Text("Create") }
-            },
-            dismissButton = {
-                TextButton(onClick = { 
-                    showTemplatePicker = false 
-                    pickedTemplate = null 
-                }) { Text("Cancel") }
-            }
-        )
     }
 }
 
@@ -1087,167 +1242,6 @@ fun PdfViewerScreen(path: String, onClose: () -> Unit) {
     }
 }
 
-// Step 1: Pick a template
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TemplatePickerDialog(
-    templates: List<ScanTemplate>,
-    onDismiss: () -> Unit,
-    onTemplateSelected: (ScanTemplate) -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Pick a Scan Template") },
-        text = {
-            if (templates.isEmpty()) {
-                Text("No templates loaded. Make sure you are connected and have permissions to view templates.")
-            } else {
-                LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
-                    items(templates) { template ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .clickable { onTemplateSelected(template) },
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text(
-                                    template.title ?: template.name,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                template.description?.let {
-                                    Text(
-                                        it,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-                                }
-                                val typeLabel = when {
-                                    template.type?.contains("agent", ignoreCase = true) == true ||
-                                    template.name.contains("agent", ignoreCase = true) -> "Agent Scan"
-                                    else -> "Advanced / Network Scan"
-                                }
-                                Text(typeLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
-}
 
-// Step 2: Create scan details dialog (after picking template)
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun CreateScanDetailsDialog(
-    template: ScanTemplate,
-    agentGroups: List<NessusAgentGroup>,
-    isLoading: Boolean,
-    onDismiss: () -> Unit,
-    onCreate: (name: String, description: String, targets: String?, agentGroupId: String?) -> Unit,
-    onLoadAgentGroups: () -> Unit
-) {
-    var name by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var targets by remember { mutableStateOf("") }
-    var selectedAgentGroupId by remember { mutableStateOf<String?>(null) }
-
-    val isAgent = template.type?.contains("agent", ignoreCase = true) == true ||
-                  template.name.contains("agent", ignoreCase = true)
-
-    if (isAgent && agentGroups.isEmpty()) {
-        LaunchedEffect(Unit) { onLoadAgentGroups() }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Create Scan from Template") },
-        text = {
-            Column {
-                Text("Template: ${template.title ?: template.name}", style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Scan Name *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Description") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                if (isAgent) {
-                    Spacer(Modifier.height(8.dp))
-                    Text("Select Agent Group", style = MaterialTheme.typography.labelMedium)
-                    if (agentGroups.isEmpty()) {
-                        Text("Loading agent groups...")
-                    } else {
-                        LazyColumn(modifier = Modifier.height(120.dp)) {
-                            items(agentGroups) { group ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { selectedAgentGroupId = group.id }
-                                        .padding(vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    RadioButton(
-                                        selected = selectedAgentGroupId == group.id,
-                                        onClick = { selectedAgentGroupId = group.id }
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("${group.name} (${group.agentsCount} agents)")
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    OutlinedTextField(
-                        value = targets,
-                        onValueChange = { targets = it },
-                        label = { Text("Targets (IPs, hostnames, CIDRs)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("192.168.1.0/24, example.com") }
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    onCreate(
-                        name,
-                        description,
-                        if (isAgent) null else targets.ifBlank { null },
-                        selectedAgentGroupId
-                    )
-                },
-                enabled = name.isNotBlank() && !isLoading && (if (isAgent) selectedAgentGroupId != null else true)
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text("Create Scan")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
-}
 
 }
