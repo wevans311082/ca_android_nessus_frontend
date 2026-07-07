@@ -164,6 +164,13 @@ fun CreateScanScreen(
         it.name.contains("agent", ignoreCase = true)
     }
 
+    LaunchedEffect(Unit) {
+        // Ensure we start with a clean create state (previous attempt may have left the flag on after error)
+        if (state.isCreatingScan) {
+            viewModel.resetCreatingScan()
+        }
+    }
+
     LaunchedEffect(isAgent) {
         if (isAgent && state.agentGroups.isEmpty()) {
             viewModel.loadAgentGroups()
@@ -191,6 +198,12 @@ fun CreateScanScreen(
             "Template: ${template.title ?: template.name}",
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+        Text(
+            "Using scanner: ${state.selectedScannerId}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
 
         OutlinedTextField(
@@ -262,7 +275,8 @@ fun CreateScanScreen(
                     name = name,
                     description = description,
                     targets = if (isAgent) null else targets.ifBlank { null },
-                    agentGroupId = selectedAgentGroupId
+                    agentGroupId = selectedAgentGroupId,
+                    scannerId = state.selectedScannerId
                 )
                 // Go back to the scan list
                 navController.popBackStack("scan_list", inclusive = false)

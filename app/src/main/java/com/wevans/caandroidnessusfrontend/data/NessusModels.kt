@@ -197,6 +197,8 @@ data class CreateScanSettings(
     val description: String? = null,
     val targets: String? = null,           // comma-separated for network scans
     @Json(name = "agent_group_id") val agentGroupId: String? = null,  // for agent scans
+    @Json(name = "scanner_id") val scannerId: String? = null,
+    @Json(name = "launch_now") val launchNow: Boolean? = false,
     val folder_id: Int? = null
 )
 

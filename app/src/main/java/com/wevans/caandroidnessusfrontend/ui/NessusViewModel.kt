@@ -315,6 +315,10 @@ class NessusViewModel(
         _uiState.update { it.copy(isUnlocked = false) }
     }
 
+    fun resetCreatingScan() {
+        _uiState.update { it.copy(isCreatingScan = false) }
+    }
+
     private fun showReportNotification(scanName: String, path: String) {
         val channelId = "report_channel"
         val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -423,24 +427,33 @@ class NessusViewModel(
         name: String,
         description: String = "",
         targets: String? = null,
-        agentGroupId: String? = null
+        agentGroupId: String? = null,
+        scannerId: String? = null
     ) = runManaged("Could not create scan") {
         _uiState.update { it.copy(isCreatingScan = true) }
 
-        val settings = CreateScanSettings(
-            name = name.trim(),
-            description = description.trim().ifBlank { null },
-            targets = targets?.trim()?.ifBlank { null },
-            agentGroupId = agentGroupId
-        )
-        val request = CreateScanRequest(uuid = templateUuid, settings = settings)
+        try {
+            val effectiveScanner = scannerId ?: uiState.value.selectedScannerId.ifBlank { "1" }
+            val settings = CreateScanSettings(
+                name = name.trim(),
+                description = description.trim().ifBlank { null },
+                targets = targets?.trim()?.ifBlank { null },
+                agentGroupId = agentGroupId,
+                scannerId = effectiveScanner.takeIf { it.isNotBlank() && it != "null" },
+                launchNow = false
+            )
+            val request = CreateScanRequest(uuid = templateUuid, settings = settings)
 
-        val response = repository().createScan(request)
+            val response = repository().createScan(request)
 
-        // Refresh the scans list after creation
-        loadScans()
+            // Refresh the scans list after creation
+            loadScans()
 
-        _uiState.update { it.copy(isCreatingScan = false, message = "Scan \"${name}\" created successfully") }
+            _uiState.update { it.copy(isCreatingScan = false, message = "Scan \"${name}\" created successfully") }
+        } catch (e: Exception) {
+            _uiState.update { it.copy(isCreatingScan = false) }
+            throw e
+        }
     }
 
     fun loadGroups() = runManaged("Could not load groups") {
@@ -516,12 +529,15 @@ class NessusViewModel(
                     is HttpException -> {
                         val code = e.code()
                         val detail = e.message()
+                        val body = try { e.response()?.errorBody()?.string()?.take(200) ?: "" } catch (_: Exception) { "" }
+                        val extra = if (body.isNotBlank()) "\nServer response: $body" else ""
                         when (code) {
                             401 -> "$defaultError (HTTP 401 Unauthorized — check your Access Key and Secret Key)"
                             403 -> "$defaultError (HTTP 403 Forbidden — insufficient permissions (needs Scan Manager role) or wrong scanner ID)"
                             404 -> "$defaultError (HTTP 404 Not Found — check scanner ID or endpoint)"
                             429 -> "$defaultError (HTTP 429 Rate limited — try again later)"
-                            else -> "$defaultError (HTTP $code: $detail)"
+                            502 -> "$defaultError (HTTP 502 Bad Gateway — the Nessus server could not process the request. Common causes: invalid/missing settings for the chosen template, wrong scanner ID, or server/proxy issue. Try a different template or check server logs.)$extra"
+                            else -> "$defaultError (HTTP $code: $detail)$extra"
                         }
                     }
                     else -> e.message ?: defaultError
