@@ -1,16 +1,20 @@
 package com.wevans.caandroidnessusfrontend
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.fragment.app.FragmentActivity
 import com.wevans.caandroidnessusfrontend.ui.NessusFrontendApp
 import com.wevans.caandroidnessusfrontend.ui.NessusViewModel
 import com.wevans.caandroidnessusfrontend.ui.theme.NessusFrontendTheme
 
-class MainActivity : ComponentActivity() {
+/**
+ * Must be a [FragmentActivity]: [androidx.biometric.BiometricPrompt] requires it.
+ * Using ComponentActivity makes the lock screen cast fail and previously skipped auth.
+ */
+class MainActivity : FragmentActivity() {
     private val viewModel: NessusViewModel by viewModels { NessusViewModel.factory(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {

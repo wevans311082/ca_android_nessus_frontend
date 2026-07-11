@@ -2,9 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- For saving reports to public Documents folder -->
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <!-- For notifications on scan complete -->
+    <!-- App lock (fingerprint / face / device credential) -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- Reports use app-specific external storage (no WRITE_EXTERNAL_STORAGE needed on API 29+) -->
+    <!-- For notifications when a report is ready -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application

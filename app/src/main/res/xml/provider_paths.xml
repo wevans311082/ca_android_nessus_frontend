@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="cache" path="." />
-    <!-- For persistently stored reports -->
+    <!-- App-specific external storage (getExternalFilesDir) — primary report location -->
     <external-files-path name="external_files" path="." />
+    <!-- Internal filesDir fallback if external storage is unavailable -->
+    <files-path name="internal_files" path="." />
 </paths>

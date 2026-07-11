@@ -54,6 +54,7 @@ data class NessusUiState(
     val scanTemplates: List<ScanTemplate> = emptyList(),
     val isCreatingScan: Boolean = false,
     val requireBiometric: Boolean = false,
+    val hasAppPin: Boolean = false,
     val isUnlocked: Boolean = false
 )
 
@@ -62,21 +63,49 @@ class NessusViewModel(
     private val repositoryFactory: (NessusSettings) -> NessusRepository,
     private val applicationContext: Context
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(NessusUiState())
+    private val _uiState = MutableStateFlow(
+        settingsStore.current.let { s ->
+            NessusUiState(
+                settings = s,
+                requireBiometric = s.requireBiometric,
+                hasAppPin = s.hasAppPin,
+                isUnlocked = !s.requireBiometric,
+                selectedScannerId = s.scannerId
+            )
+        }
+    )
     val uiState: StateFlow<NessusUiState> = _uiState.asStateFlow()
 
+    /**
+     * App-specific external storage (Documents/CyberAsk Reports).
+     *
+     * Using [Context.getExternalFilesDir] instead of the public Documents directory:
+     * - No WRITE_EXTERNAL_STORAGE / MANAGE_EXTERNAL_STORAGE needed (targetSdk 35 + scoped storage)
+     * - Works reliably on emulators and physical devices
+     * - Covered by FileProvider external-files-path for open/share
+     * - Cleared only on uninstall (not on cache clear)
+     */
     private fun getReportsDir(): File {
-        val publicDocs = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-        return File(publicDocs, "CyberAsk Reports").apply { mkdirs() }
+        val base = applicationContext.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
+            ?: applicationContext.filesDir
+        val dir = File(base, "CyberAsk Reports")
+        if (!dir.exists() && !dir.mkdirs()) {
+            // Fall back to internal storage if external is unavailable (rare on emulators)
+            val fallback = File(applicationContext.filesDir, "CyberAsk Reports")
+            fallback.mkdirs()
+            return fallback
+        }
+        return dir
     }
 
     init {
         viewModelScope.launch {
             settingsStore.settings.collect { settings ->
-                _uiState.update { 
+                _uiState.update {
                     it.copy(
                         settings = settings,
                         requireBiometric = settings.requireBiometric,
+                        hasAppPin = settings.hasAppPin,
                         isUnlocked = !settings.requireBiometric || it.isUnlocked
                     )
                 }
@@ -88,8 +117,22 @@ class NessusViewModel(
         viewModelScope.launch {
             val current = uiState.value.settings
             val newScanner = scannerId?.trim()?.ifBlank { "1" } ?: current.scannerId
-            settingsStore.save(NessusSettings(baseUrl.trim(), accessKey.trim(), secretKey.trim(), newScanner))
-            _uiState.update { it.copy(message = "Settings saved", selectedScannerId = newScanner) }
+            // Preserve lock/PIN flags and other fields when saving connection settings
+            settingsStore.save(
+                current.copy(
+                    baseUrl = baseUrl.trim(),
+                    accessKey = accessKey.trim(),
+                    secretKey = secretKey.trim(),
+                    scannerId = newScanner
+                )
+            )
+            _uiState.update {
+                it.copy(
+                    settings = settingsStore.current,
+                    message = "Settings saved",
+                    selectedScannerId = newScanner
+                )
+            }
         }
     }
 
@@ -97,20 +140,112 @@ class NessusViewModel(
         val status = repository().testConnection()
         val now = System.currentTimeMillis()
         if (status.status == "ready") {
-            _uiState.update { 
+            _uiState.update {
                 it.copy(
                     message = "Connection successful!",
                     connectionStatus = "Connected",
                     lastConnected = now
-                ) 
+                )
             }
         } else {
-            _uiState.update { 
+            _uiState.update {
                 it.copy(
                     message = "Connection failed: Server not ready (${status.status})",
                     connectionStatus = "Failed",
                     lastConnected = now
-                ) 
+                )
+            }
+        }
+    }
+
+    /**
+     * Setup-wizard helper: persist credentials, test the connection, then load scanners.
+     * Callback runs on the main thread with success = connection ready.
+     */
+    fun saveTestAndLoadScanners(
+        baseUrl: String,
+        accessKey: String,
+        secretKey: String,
+        preferredScannerId: String? = null,
+        onComplete: (success: Boolean) -> Unit
+    ) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(loading = true, message = "Saving and testing connection…") }
+            try {
+                val current = uiState.value.settings
+                val newScanner = preferredScannerId?.trim()?.ifBlank { null }
+                    ?: current.scannerId.ifBlank { "1" }
+                settingsStore.save(
+                    current.copy(
+                        baseUrl = baseUrl.trim(),
+                        accessKey = accessKey.trim(),
+                        secretKey = secretKey.trim(),
+                        scannerId = newScanner
+                    )
+                )
+                _uiState.update {
+                    it.copy(
+                        settings = settingsStore.current,
+                        selectedScannerId = newScanner
+                    )
+                }
+
+                val status = repository().testConnection()
+                val now = System.currentTimeMillis()
+                if (status.status != "ready") {
+                    _uiState.update {
+                        it.copy(
+                            message = "Connection failed: Server not ready (${status.status})",
+                            connectionStatus = "Failed",
+                            lastConnected = now,
+                            loading = false
+                        )
+                    }
+                    onComplete(false)
+                    return@launch
+                }
+
+                val scanners = try {
+                    repository().listScanners()
+                } catch (_: Exception) {
+                    emptyList()
+                }
+
+                // Prefer previously selected id if still present; else first scanner; else keep preferred
+                val selected = when {
+                    scanners.any { it.id == newScanner } -> newScanner
+                    scanners.isNotEmpty() -> scanners.first().id ?: newScanner
+                    else -> newScanner
+                }
+                if (selected != newScanner) {
+                    settingsStore.save(settingsStore.current.copy(scannerId = selected))
+                }
+
+                _uiState.update {
+                    it.copy(
+                        settings = settingsStore.current,
+                        scanners = scanners,
+                        selectedScannerId = selected,
+                        message = if (scanners.isEmpty()) {
+                            "Connected — no scanners returned (you can set ID manually)"
+                        } else {
+                            "Connection successful! Select a scanner."
+                        },
+                        connectionStatus = "Connected",
+                        lastConnected = now,
+                        loading = false
+                    )
+                }
+                onComplete(true)
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        message = "Connection failed: ${e.message}",
+                        connectionStatus = "Failed",
+                        loading = false
+                    )
+                }
+                onComplete(false)
             }
         }
     }
@@ -121,19 +256,21 @@ class NessusViewModel(
         _uiState.update { it.copy(scanners = list, selectedScannerId = currentSettings.scannerId) }
     }
 
-    fun selectScanner(scannerId: String) {
+    fun selectScanner(scannerId: String, refreshAgents: Boolean = true) {
         viewModelScope.launch {
             val s = uiState.value.settings
             settingsStore.save(s.copy(scannerId = scannerId))
-            _uiState.update { 
+            _uiState.update {
                 it.copy(
+                    settings = settingsStore.current,
                     selectedScannerId = scannerId,
                     message = "Scanner selected: $scannerId"
-                ) 
+                )
             }
-            // Refresh agent data with new scanner
-            loadAgentGroups()
-            loadAgents()
+            if (refreshAgents) {
+                loadAgentGroups()
+                loadAgents()
+            }
         }
     }
 
@@ -165,8 +302,12 @@ class NessusViewModel(
 
             val responseBody = repository().downloadScan(scanId, fileId)
 
-            // Store in public Documents/CyberAsk Reports
+            // App-specific external storage (no runtime storage permission required)
             val reportsDir = getReportsDir()
+            if (!reportsDir.exists() || !reportsDir.canWrite()) {
+                throw Exception("Cannot write to reports folder: ${reportsDir.absolutePath}")
+            }
+
             val safeName = (scanName?.take(50)?.replace(Regex("[^a-zA-Z0-9._-]"), "_") ?: "scan-$scanId")
             val timestamp = System.currentTimeMillis()
             val ext = if (format == "pdf") "pdf" else format
@@ -177,15 +318,21 @@ class NessusViewModel(
                 FileOutputStream(file).use { output -> input.copyTo(output) }
             }
 
+            if (!file.exists() || file.length() == 0L) {
+                throw Exception("Report file was not written (empty or missing): ${file.absolutePath}")
+            }
+
             // Add to local history
             val displayName = scanName ?: "Scan #$scanId"
             addLocalReport(file.absolutePath, displayName, timestamp)
+            // Refresh list so Reports screen stays in sync for non-PDF formats too
+            loadLocalReports()
 
-            _uiState.update { 
+            _uiState.update {
                 it.copy(
-                    downloadedFilePath = file.absolutePath, 
-                    message = "Report saved locally. Open Reports to view or share."
-                ) 
+                    downloadedFilePath = file.absolutePath,
+                    message = "Report saved (${file.length()} bytes). Open Reports to view or share."
+                )
             }
             showReportNotification(scanName ?: "Scan #$scanId", file.absolutePath)
         } catch (e: Exception) {
@@ -206,11 +353,17 @@ class NessusViewModel(
 
     fun loadLocalReports() {
         val reportsDir = getReportsDir()
-        if (!reportsDir.exists()) return
+        if (!reportsDir.exists()) {
+            _uiState.update { it.copy(localReports = emptyList()) }
+            return
+        }
 
-        val files = reportsDir.listFiles { f -> f.isFile && f.name.endsWith(".pdf", true) } ?: return
+        val knownExts = setOf("pdf", "csv", "html", "nessus", "txt")
+        val files = reportsDir.listFiles { f ->
+            f.isFile && f.extension.lowercase() in knownExts
+        } ?: emptyArray()
+
         val reports = files.map { file ->
-            // Try to make a nice name from filename
             val base = file.nameWithoutExtension.substringBeforeLast('_')
             val display = if (base.isNotBlank()) base.replace('_', ' ') else file.name
             LocalReport(file.absolutePath, display, file.lastModified())
@@ -219,41 +372,65 @@ class NessusViewModel(
         _uiState.update { it.copy(localReports = reports) }
     }
 
+    private fun mimeTypeForPath(path: String): String = when (File(path).extension.lowercase()) {
+        "pdf" -> "application/pdf"
+        "csv" -> "text/csv"
+        "html", "htm" -> "text/html"
+        "nessus", "xml" -> "application/xml"
+        else -> "application/octet-stream"
+    }
+
     fun openReport(path: String) {
         try {
             val file = File(path)
+            if (!file.exists()) {
+                _uiState.update { it.copy(message = "Report file not found: $path") }
+                return
+            }
             val uri = FileProvider.getUriForFile(
                 applicationContext,
                 applicationContext.packageName + ".provider",
                 file
             )
+            val mime = mimeTypeForPath(path)
             val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/pdf")
+                setDataAndType(uri, mime)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            applicationContext.startActivity(Intent.createChooser(intent, "Open PDF"))
+            val chooser = Intent.createChooser(intent, "Open report").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            applicationContext.startActivity(chooser)
         } catch (e: Exception) {
-            _uiState.update { it.copy(message = "Could not open PDF: ${e.message}") }
+            _uiState.update { it.copy(message = "Could not open report: ${e.message}") }
         }
     }
 
     fun shareReport(path: String) {
         try {
             val file = File(path)
+            if (!file.exists()) {
+                _uiState.update { it.copy(message = "Report file not found: $path") }
+                return
+            }
             val uri = FileProvider.getUriForFile(
                 applicationContext,
                 applicationContext.packageName + ".provider",
                 file
             )
+            val mime = mimeTypeForPath(path)
             val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/pdf"
+                type = mime
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            applicationContext.startActivity(Intent.createChooser(intent, "Share Report"))
+            val chooser = Intent.createChooser(intent, "Share Report").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            applicationContext.startActivity(chooser)
         } catch (e: Exception) {
-            _uiState.update { it.copy(message = "Could not share PDF: ${e.message}") }
+            _uiState.update { it.copy(message = "Could not share report: ${e.message}") }
         }
     }
 
@@ -298,17 +475,93 @@ class NessusViewModel(
         _uiState.update { it.copy(downloadedFilePath = null) }
     }
 
-    fun setRequireBiometric(require: Boolean) {
+    /**
+     * Enables app lock only when a backup PIN is already configured.
+     * @return false if enable was requested without a PIN (caller should show PIN setup)
+     */
+    fun setRequireBiometric(require: Boolean): Boolean {
+        if (require && !settingsStore.hasAppPin()) {
+            _uiState.update {
+                it.copy(message = "Set a backup PIN before enabling app lock")
+            }
+            return false
+        }
         viewModelScope.launch {
             val current = uiState.value.settings
             val updated = current.copy(requireBiometric = require)
             settingsStore.save(updated)
-            _uiState.update { it.copy(requireBiometric = require) }
+            // Turning lock on immediately locks; turning off leaves the session open.
+            _uiState.update {
+                it.copy(
+                    requireBiometric = require,
+                    hasAppPin = settingsStore.hasAppPin(),
+                    isUnlocked = if (require) false else true
+                )
+            }
         }
+        return true
+    }
+
+    /** Creates or replaces the in-app backup PIN. Optionally enables app lock after success. */
+    fun setAppPin(pin: String, confirmPin: String, enableLock: Boolean = false): Boolean {
+        if (pin != confirmPin) {
+            _uiState.update { it.copy(message = "PINs do not match") }
+            return false
+        }
+        val error = settingsStore.setAppPin(pin)
+        if (error != null) {
+            _uiState.update { it.copy(message = error) }
+            return false
+        }
+        if (enableLock) {
+            val current = uiState.value.settings
+            settingsStore.save(current.copy(requireBiometric = true))
+            _uiState.update {
+                it.copy(
+                    requireBiometric = true,
+                    hasAppPin = true,
+                    isUnlocked = true, // user just proved knowledge of the new PIN by setting it
+                    message = "App lock enabled with backup PIN"
+                )
+            }
+        } else {
+            _uiState.update {
+                it.copy(hasAppPin = true, message = "Backup PIN saved")
+            }
+        }
+        return true
+    }
+
+    fun changeAppPin(currentPin: String, newPin: String, confirmPin: String): Boolean {
+        if (!settingsStore.verifyAppPin(currentPin)) {
+            _uiState.update { it.copy(message = "Current PIN is incorrect") }
+            return false
+        }
+        if (newPin != confirmPin) {
+            _uiState.update { it.copy(message = "New PINs do not match") }
+            return false
+        }
+        val error = settingsStore.setAppPin(newPin)
+        if (error != null) {
+            _uiState.update { it.copy(message = error) }
+            return false
+        }
+        _uiState.update { it.copy(hasAppPin = true, message = "PIN changed") }
+        return true
+    }
+
+    /** Verifies the in-app PIN and unlocks on success. */
+    fun unlockWithPin(pin: String): Boolean {
+        if (!settingsStore.verifyAppPin(pin)) {
+            _uiState.update { it.copy(message = "Incorrect PIN") }
+            return false
+        }
+        unlockApp()
+        return true
     }
 
     fun unlockApp() {
-        _uiState.update { it.copy(isUnlocked = true) }
+        _uiState.update { it.copy(isUnlocked = true, message = null) }
     }
 
     fun lockApp() {
