@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.wevans.caandroidnessusfrontend"
+    namespace = "uk.co.cyberask.scanner"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.wevans.caandroidnessusfrontend"
+        applicationId = "uk.co.cyberask.scanner"
         minSdk = 26
         targetSdk = 35
         versionCode = 3

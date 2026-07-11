@@ -1,0 +1,38 @@
+# CyberAsk Nessus Mock — demo API for Play Store review
+#
+# Usage:
+#   cp .env.example .env
+#   # edit .env if needed
+#   docker compose up -d --build
+#
+# Android app Settings:
+#   API URL:     https://YOUR_HOST:8834   (or http:// if you terminate TLS elsewhere)
+#   Access Key:  value of NESSUS_ACCESS_KEY
+#   Secret Key:  value of NESSUS_SECRET_KEY
+#   Scanner ID:  1
+
+services:
+  nessus-mock:
+    build: .
+    container_name: cyberask-nessus-mock
+    ports:
+      - "${PORT:-8834}:${PORT:-8834}"
+    env_file:
+      - .env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "${PORT:-8834}"
+      # SQLite file on the named volume — survives container restarts
+      DATABASE_PATH: /data/nessus_mock.db
+    volumes:
+      - nessus_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:${PORT:-8834}/server/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  nessus_data:

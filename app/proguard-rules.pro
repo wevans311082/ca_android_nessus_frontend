@@ -1,11 +1,11 @@
 # Production ProGuard / R8 rules for Nessus frontend
 
 # Keep application class and main entry
--keep public class com.wevans.caandroidnessusfrontend.MainActivity
+-keep public class uk.co.cyberask.scanner.MainActivity
 
 # === Moshi (reflection) - CRITICAL to prevent JSON crashes in release ===
 # Keep all our model classes and their fields + constructors
--keep class com.wevans.caandroidnessusfrontend.data.** { *; }
+-keep class uk.co.cyberask.scanner.data.** { *; }
 
 # Moshi general
 -keep class com.squareup.moshi.** { *; }
@@ -34,7 +34,7 @@
 -keepattributes RuntimeVisibleParameterAnnotations
 
 # Keep all Retrofit service interfaces (methods + annotations)
--keep class com.wevans.caandroidnessusfrontend.data.NessusApiService { *; }
+-keep class uk.co.cyberask.scanner.data.NessusApiService { *; }
 
 # === OkHttp ===
 -keep class okhttp3.** { *; }
@@ -58,7 +58,7 @@
 -renamesourcefileattribute SourceFile
 
 # Prevent R8 from stripping BuildConfig if used
--keep class com.wevans.caandroidnessusfrontend.BuildConfig { *; }
+-keep class uk.co.cyberask.scanner.BuildConfig { *; }
 
 # If using any enum or sealed for models
 -keepclassmembers enum * { *; }

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Production network security configuration.
+  - Disallows cleartext (HTTP) by default for security and Play Store best practices.
+  - Nessus/Tenable endpoints should use valid HTTPS.
+  - For on-premises Nessus with self-signed certificates:
+    * Prefer obtaining a proper certificate (Let's Encrypt, internal CA trusted by device).
+    * As a last resort, advanced users can temporarily allow user CAs or specific domains,
+      but broad trust is discouraged and may affect Play review.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <!-- System CAs (default) -->
+            <certificates src="system" />
+            <!-- Optionally trust user-installed CAs for on-prem testing.
+                 Uncomment the line below only if you must support self-signed certs
+                 installed in the device user CA store. -->
+            <!-- <certificates src="user" /> -->
+        </trust-anchors>
+    </base-config>
+
+    <!-- Example: if you need to pin specific domains in future -->
+    <!--
+    <domain-config>
+        <domain includeSubdomains="true">cloud.tenable.com</domain>
+        <pin-set>
+            <pin digest="SHA-256">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</pin>
+        </pin-set>
+    </domain-config>
+    -->
+</network-security-config>
