@@ -28,7 +28,7 @@ internal class NessusAuthInterceptor(
                 header("X-ApiKeys", "accessKey=${auth.accessKey}; secretKey=${auth.secretKey}")
             }
             header("Accept", "application/json")
-            header("User-Agent", "CyberAskScanner/1.1 (Android)")
+            header("User-Agent", "CyberAskScanner/${BuildConfig.VERSION_NAME} (Android)")
         }.build()
         return chain.proceed(request)
     }

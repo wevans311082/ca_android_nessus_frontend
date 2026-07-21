@@ -573,6 +573,14 @@ class NessusViewModel(
     }
 
     private fun showReportNotification(scanName: String, path: String) {
+        // Android 13+: POST_NOTIFICATIONS is runtime. Without grant, notify() is a no-op / can fail.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = applicationContext.checkSelfPermission(
+                android.Manifest.permission.POST_NOTIFICATIONS
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!granted) return
+        }
+
         val channelId = "report_channel"
         val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 

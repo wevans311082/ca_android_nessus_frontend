@@ -5,14 +5,15 @@ plugins {
 
 android {
     namespace = "uk.co.cyberask.scanner"
-    compileSdk = 35
+    // Google Play: new apps/updates must target API 36 from 31 Aug 2026
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "uk.co.cyberask.scanner"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 3
-        versionName = "1.3"
+        targetSdk = 36
+        versionCode = 4
+        versionName = "1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

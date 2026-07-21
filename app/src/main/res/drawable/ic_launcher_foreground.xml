@@ -1,22 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive-icon foreground for CyberAsk Scanner.
+  Must match Play Store hi-res icon (play_store_assets/icon/app_icon_512.png):
+  white-outlined shield, cyan fill, concentric target mark on navy background.
+  Viewport 108dp; important content stays in the ~72dp safe zone.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- Transparent full canvas (background colour comes from adaptive-icon bg) -->
     <path
         android:fillColor="#00000000"
         android:pathData="M0,0h108v108h-108z" />
+
+    <!-- White shield outline (slightly larger) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,18L26,30V50C26,67.27 37.94,83.24 54,88C70.06,83.24 82,67.27 82,50V30L54,18Z" />
+        android:pathData="M54,20 L28,31.5 V51.5 C28,69.5 39.5,85.5 54,91 C68.5,85.5 80,69.5 80,51.5 V31.5 L54,20 Z" />
+
+    <!-- Cyan shield fill -->
     <path
-        android:fillColor="#2196F3"
-        android:pathData="M54,22L30,32.3V50C30,64.73 40.24,78.4 54,83.7C67.76,78.4 78,64.73 78,50V32.3L54,22Z" />
+        android:fillColor="#06B6D4"
+        android:pathData="M54,24.5 L32,34 V51.5 C32,67.5 41.5,81.5 54,86.5 C66.5,81.5 76,67.5 76,51.5 V34 L54,24.5 Z" />
+
+    <!-- Target: outer white ring -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,35C45.72,35 39,41.72 39,50C39,58.28 45.72,65 54,65C62.28,65 69,58.28 69,50C69,41.72 62.28,35 54,35ZM54,61C47.92,61 43,56.08 43,50C43,43.92 47.92,39 54,39C60.08,39 65,43.92 65,50C65,56.08 60.08,61 54,61Z" />
+        android:pathData="M54,38.5 C47.1,38.5 41.5,44.1 41.5,51 C41.5,57.9 47.1,63.5 54,63.5 C60.9,63.5 66.5,57.9 66.5,51 C66.5,44.1 60.9,38.5 54,38.5 Z M54,43 C58.4,43 62,46.6 62,51 C62,55.4 58.4,59 54,59 C49.6,59 46,55.4 46,51 C46,46.6 49.6,43 54,43 Z" />
+
+    <!-- Target: cyan middle ring -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,46L54,50L58,50C58,47.79 56.21,46 54,46Z" />
+        android:fillColor="#06B6D4"
+        android:pathData="M54,44.5 C50.4,44.5 47.5,47.4 47.5,51 C47.5,54.6 50.4,57.5 54,57.5 C57.6,57.5 60.5,54.6 60.5,51 C60.5,47.4 57.6,44.5 54,44.5 Z M54,48 C55.7,48 57,49.3 57,51 C57,52.7 55.7,54 54,54 C52.3,54 51,52.7 51,51 C51,49.3 52.3,48 54,48 Z" />
+
+    <!-- Target: dark navy centre -->
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M54,48.5 C52.6,48.5 51.5,49.6 51.5,51 C51.5,52.4 52.6,53.5 54,53.5 C55.4,53.5 56.5,52.4 56.5,51 C56.5,49.6 55.4,48.5 54,48.5 Z" />
 </vector>
