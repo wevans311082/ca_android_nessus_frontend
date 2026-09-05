@@ -1,0 +1,40 @@
+# Play Store Nessus mock. Reuse volume nessus_mock_nessus_data on caprod01.
+#   cd /opt/ca_android_nessus_frontend/nessus_mock
+#   docker stack deploy -c docker-stack.yml nessus_mock
+
+services:
+  nessus-mock:
+    image: nessus_mock-nessus-mock:latest
+    env_file:
+      - .env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8888"
+      DATABASE_PATH: /data/nessus_mock.db
+    volumes:
+      - nessus_data:/data
+    networks:
+      - ca_public
+    deploy:
+      placement:
+        constraints:
+          - node.hostname == caprod01
+      restart_policy:
+        condition: on-failure
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=ca_public"
+        - "traefik.http.routers.nessus.rule=Host(`nessus.cyberask.co.uk`)"
+        - "traefik.http.routers.nessus.entrypoints=websecure"
+        - "traefik.http.routers.nessus.tls=true"
+        - "traefik.http.routers.nessus.tls.certresolver=letsencrypt"
+        - "traefik.http.services.nessus.loadbalancer.server.port=8888"
+
+networks:
+  ca_public:
+    external: true
+
+volumes:
+  nessus_data:
+    external: true
+    name: nessus_mock_nessus_data
